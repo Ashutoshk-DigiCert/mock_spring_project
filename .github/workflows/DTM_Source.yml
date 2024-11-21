@@ -55,18 +55,19 @@ jobs:
         with:
           github-token: ${{ secrets.WORKFLOW_PAT }}
           script: |
-            github.rest.actions.createWorkflowDispatch({
+            const result = await github.rest.actions.createWorkflowDispatch({
               owner: 'Ashutoshk-DigiCert',
               repo: 'DTMmock',
               workflow_id: 'translate.yml',
               ref: 'main',
               inputs: {
-                properties_changed: String(${{ needs.check-changes.outputs.properties_changed }}),
-                glossaries_changed: String(${{ needs.check-changes.outputs.glossaries_changed }}),
+                properties_changed: '${{ needs.check-changes.outputs.properties_changed }}',
+                glossaries_changed: '${{ needs.check-changes.outputs.glossaries_changed }}',
                 changed_glossaries: '${{ needs.check-changes.outputs.changed_glossaries }}',
-                diff_count: String(${{ needs.check-changes.outputs.diff_count }})
+                diff_count: '${{ needs.check-changes.outputs.diff_count }}'
               }
-            })
+            });
+
 
       - name: Wait for Translation Workflow to Complete
         uses: actions/github-script@v6
@@ -77,7 +78,7 @@ jobs:
               owner: 'Ashutoshk-DigiCert',
               repo: 'DTMmock',
               workflow_id: 'translate.yml',
-              status: 'in_progress',
+              status: 'in_progress'
             });
             if (response.data.total_count > 0) {
               throw new Error('Translation workflow is still running.');
@@ -111,9 +112,11 @@ jobs:
           title: ":globe_with_meridians: Update translations for PR #${{ github.event.pull_request.number }}"
           body: |
             ## Automated Translation Updates
+
             Changes detected in:
             ${{ needs.check-changes.outputs.properties_changed == 'true' && '- messages_en.properties' || '' }}
             ${{ needs.check-changes.outputs.glossaries_changed == 'true' && '- glossaries files' || '' }}
+
             Number of changes: ${{ needs.check-changes.outputs.diff_count }}
             Original PR: #${{ github.event.pull_request.number }}
           branch: translations/pr-${{ github.event.pull_request.number }}
