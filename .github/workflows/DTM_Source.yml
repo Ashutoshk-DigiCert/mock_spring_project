@@ -67,9 +67,9 @@ jobs:
         with:
           script: |
             const response = await github.rest.actions.listWorkflowRunsForRepo({
-              owner: 'OWNER',
-              repo: 'translation-repo',
-              workflow_id: 'translation-processing.yml',
+              owner: 'Ashutoshk-DigiCert',
+              repo: 'DTMmock',
+              workflow_id: 'translate.yml',
               status: 'in_progress',
             });
             if (response.data.total_count > 0) {
