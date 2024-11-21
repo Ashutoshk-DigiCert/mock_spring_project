@@ -53,6 +53,7 @@ jobs:
       - name: Trigger Translation Project Workflow
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.WORKFLOW_PAT }}
           script: |
             github.rest.actions.createWorkflowDispatch({
               owner: 'Ashutoshk-DigiCert',
@@ -69,6 +70,7 @@ jobs:
       - name: Wait for Translation Workflow to Complete
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.WORKFLOW_PAT }}
           script: |
             const response = await github.rest.actions.listWorkflowRunsForRepo({
               owner: 'Ashutoshk-DigiCert',
@@ -79,6 +81,7 @@ jobs:
             if (response.data.total_count > 0) {
               throw new Error('Translation workflow is still running.');
             }
+
       - name: Download Translated Files
         uses: actions/download-artifact@v3
         with:
