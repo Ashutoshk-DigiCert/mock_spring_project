@@ -50,12 +50,18 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+      - name: Debug outputs
+        run: |
+          echo "properties_changed: ${{ needs.check-changes.outputs.properties_changed }}"
+          echo "glossaries_changed: ${{ needs.check-changes.outputs.glossaries_changed }}"
+          echo "changed_glossaries: ${{ needs.check-changes.outputs.changed_glossaries }}"
+          echo "diff_count: ${{ needs.check-changes.outputs.diff_count }}"
       - name: Trigger Translation Project Workflow
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.WORKFLOW_PAT }}
           script: |
-            const result = await github.rest.actions.createWorkflowDispatch({
+            await github.rest.actions.createWorkflowDispatch({
               owner: 'Ashutoshk-DigiCert',
               repo: 'DTMmock',
               workflow_id: 'translate.yml',
@@ -67,7 +73,6 @@ jobs:
                 diff_count: '${{ needs.check-changes.outputs.diff_count }}'
               }
             });
-
 
       - name: Wait for Translation Workflow to Complete
         uses: actions/github-script@v6
