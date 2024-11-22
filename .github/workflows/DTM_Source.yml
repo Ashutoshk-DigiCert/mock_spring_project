@@ -46,90 +46,100 @@ jobs:
     needs: check-changes
     if: needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      workflow_id: ${{ steps.trigger.outputs.workflow_id }}
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-      - name: Debug outputs
-        run: |
-          echo "properties_changed: ${{ needs.check-changes.outputs.properties_changed }}"
-          echo "glossaries_changed: ${{ needs.check-changes.outputs.glossaries_changed }}"
-          echo "changed_glossaries: ${{ needs.check-changes.outputs.changed_glossaries }}"
-          echo "diff_count: ${{ needs.check-changes.outputs.diff_count }}"
-      - name: Trigger Translation Project Workflow
+      - name: Trigger Translation Workflow
+        id: trigger
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.WORKFLOW_PAT }}
           script: |
-            await github.rest.actions.createWorkflowDispatch({
+            const response = await github.rest.actions.createWorkflowDispatch({
               owner: 'Ashutoshk-DigiCert',
               repo: 'DTMmock',
               workflow_id: 'translate.yml',
               ref: 'main',
               inputs: {
-                properties_changed: process.env.PROPERTIES_CHANGED,
-                glossaries_changed: process.env.GLOSSARIES_CHANGED,
-                changed_glossaries: process.env.CHANGED_GLOSSARIES || '',
-                diff_count: process.env.DIFF_COUNT
+                properties_changed: '${{ needs.check-changes.outputs.properties_changed }}',
+                glossaries_changed: '${{ needs.check-changes.outputs.glossaries_changed }}',
+                changed_glossaries: '${{ needs.check-changes.outputs.changed_glossaries }}',
+                diff_count: '${{ needs.check-changes.outputs.diff_count }}'
               }
             });
-        env:
-          PROPERTIES_CHANGED: ${{ needs.check-changes.outputs.properties_changed }}
-          GLOSSARIES_CHANGED: ${{ needs.check-changes.outputs.glossaries_changed }}
-          CHANGED_GLOSSARIES: ${{ needs.check-changes.outputs.changed_glossaries }}
-          DIFF_COUNT: ${{ needs.check-changes.outputs.diff_count }}
+            return response.data.id;
 
-      - name: Wait for Translation Workflow to Complete
+  download-translations:
+    needs: trigger-translation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Wait for translation workflow
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.WORKFLOW_PAT }}
           script: |
-            const response = await github.rest.actions.listWorkflowRunsForRepo({
-              owner: 'Ashutoshk-DigiCert',
-              repo: 'DTMmock',
-              workflow_id: 'translate.yml',
-              status: 'in_progress'
-            });
-            if (response.data.total_count > 0) {
-              throw new Error('Translation workflow is still running.');
+            const MAX_ATTEMPTS = 30;
+            const SLEEP_TIME = 30000;
+            
+            for (let i = 0; i < MAX_ATTEMPTS; i++) {
+              console.log(`Attempt ${i + 1} of ${MAX_ATTEMPTS}`);
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: 'Ashutoshk-DigiCert',
+                repo: 'DTMmock',
+                workflow_id: 'translate.yml',
+                status: 'completed',
+                per_page: 1
+              });
+            
+              if (runs.data.workflow_runs.length > 0) {
+                const run = runs.data.workflow_runs[0];
+                if (run.conclusion === 'success') {
+                  console.log('Translation workflow completed successfully');
+                  break;
+                } else if (run.conclusion === 'failure') {
+                  throw new Error('Translation workflow failed');
+                }
+              }
+            
+              await new Promise(resolve => setTimeout(resolve, SLEEP_TIME));
             }
 
-      - name: Download Translated Files
-        uses: actions/download-artifact@v3
+      - name: Download Artifacts
+        uses: actions/github-script@v6
         with:
-          name: translated-files
-          path: translated-files/
-      - name: Copy Translated Files Back
+          github-token: ${{ secrets.WORKFLOW_PAT }}
+          script: |
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: 'Ashutoshk-DigiCert',
+              repo: 'DTMmock'
+            });
+            
+            const artifact = artifacts.data.artifacts.find(a => a.name === 'translated-files');
+            if (!artifact) {
+              throw new Error('No translation artifacts found');
+            }
+            
+            const download = await github.rest.actions.downloadArtifact({
+              owner: 'Ashutoshk-DigiCert',
+              repo: 'DTMmock',
+              artifact_id: artifact.id,
+              archive_format: 'zip'
+            });
+
+      - name: Update Repository Files
         run: |
+          unzip translated-files.zip -d translated-files
           cp -r translated-files/* src/main/resources/
-      - name: Commit Translated Files
+
+      - name: Commit and Push Changes
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add src/main/resources/messages_*.properties
           git add src/main/resources/glossaries/*.csv
           git commit -m "Updated translations and glossaries"
-      - name: Push Translated Files
-        uses: ad-m/github-push-action@v0.7.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.event.pull_request.head.ref }}
-      - name: Create Pull Request for Translations
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: ":globe_with_meridians: Update translations"
-          title: ":globe_with_meridians: Update translations for PR #${{ github.event.pull_request.number }}"
-          body: |
-            ## Automated Translation Updates
-
-            Changes detected in:
-            ${{ needs.check-changes.outputs.properties_changed == 'true' && '- messages_en.properties' || '' }}
-            ${{ needs.check-changes.outputs.glossaries_changed == 'true' && '- glossaries files' || '' }}
-
-            Number of changes: ${{ needs.check-changes.outputs.diff_count }}
-            Original PR: #${{ github.event.pull_request.number }}
-          branch: translations/pr-${{ github.event.pull_request.number }}
-          base: ${{ github.event.pull_request.base.ref }}
-          labels: automated-translation
-          delete-branch: true
+          git push origin ${{ github.event.pull_request.head.ref }}
