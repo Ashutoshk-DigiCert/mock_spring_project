@@ -67,12 +67,17 @@ jobs:
               workflow_id: 'translate.yml',
               ref: 'main',
               inputs: {
-                properties_changed: '${{ needs.check-changes.outputs.properties_changed }}',
-                glossaries_changed: '${{ needs.check-changes.outputs.glossaries_changed }}',
-                changed_glossaries: '${{ needs.check-changes.outputs.changed_glossaries }}',
-                diff_count: '${{ needs.check-changes.outputs.diff_count }}'
+                properties_changed: process.env.PROPERTIES_CHANGED,
+                glossaries_changed: process.env.GLOSSARIES_CHANGED,
+                changed_glossaries: process.env.CHANGED_GLOSSARIES || '',
+                diff_count: process.env.DIFF_COUNT
               }
             });
+        env:
+          PROPERTIES_CHANGED: ${{ needs.check-changes.outputs.properties_changed }}
+          GLOSSARIES_CHANGED: ${{ needs.check-changes.outputs.glossaries_changed }}
+          CHANGED_GLOSSARIES: ${{ needs.check-changes.outputs.changed_glossaries }}
+          DIFF_COUNT: ${{ needs.check-changes.outputs.diff_count }}
 
       - name: Wait for Translation Workflow to Complete
         uses: actions/github-script@v6
