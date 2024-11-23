@@ -78,24 +78,52 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const checkRun = async () => {
-              const response = await github.rest.actions.listWorkflowRuns({
-                owner: context.repo.owner,
-                repo: 'DTMmock',
-                workflow_id: 'translate.yml',
-                branch: 'main'
-              });
-            
-              const run = response.data.workflow_runs[0];
-              if (run.status === 'completed') {
-                return run.conclusion === 'success';
+            const waitForWorkflow = async () => {
+              const workflowId = 'translate.yml';
+              const branchName = 'main';
+              const repoOwner = context.repo.owner;
+              const repoName = 'DTMmock';
+
+              let completed = false;
+              while (!completed) {
+                // List recent workflow runs
+                const response = await github.rest.actions.listWorkflowRuns({
+                  owner: repoOwner,
+                  repo: repoName,
+                  workflow_id: workflowId,
+                  branch: branchName,
+                  status: 'in_progress'
+                });
+
+                // Check for in-progress workflows
+                if (response.data.total_count === 0) {
+                  console.log('No in-progress workflows found. Checking for completed workflows...');
+                  const completedResponse = await github.rest.actions.listWorkflowRuns({
+                    owner: repoOwner,
+                    repo: repoName,
+                    workflow_id: workflowId,
+                    branch: branchName,
+                    status: 'completed'
+                  });
+
+                  const latestRun = completedResponse.data.workflow_runs[0];
+                  if (latestRun && latestRun.conclusion === 'success') {
+                    console.log('Workflow completed successfully!');
+                    completed = true;
+                  } else if (latestRun && latestRun.conclusion === 'failure') {
+                    throw new Error('Triggered workflow failed.');
+                  }
+                } else {
+                  console.log('Waiting for triggered workflow to complete...');
+                }
+
+                // Wait before checking again
+                await new Promise(resolve => setTimeout(resolve, 10000));
               }
-            
-              await new Promise(resolve => setTimeout(resolve, 10000));
-              return await checkRun();
             };
+
+            await waitForWorkflow();
             
-            await checkRun();
 
       - name: Download Translated Files
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
