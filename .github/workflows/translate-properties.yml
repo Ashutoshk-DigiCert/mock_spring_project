@@ -96,8 +96,7 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Run Gradle Build
-        run: gradle build -q
+
 
       - name: Copy files to translation repository
         run: |
