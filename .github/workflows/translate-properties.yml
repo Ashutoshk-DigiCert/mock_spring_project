@@ -16,6 +16,7 @@ jobs:
       glossaries_changed: ${{ steps.check-files.outputs.glossaries_changed }}
       changed_glossaries: ${{ steps.check-files.outputs.changed_glossaries }}
       diff_count: ${{ steps.check-diff.outputs.diff_count }}
+      is_automated_merge: ${{ steps.check-automated.outputs.is_automated_merge }}
 
     steps:
       - uses: actions/checkout@v3
@@ -48,10 +49,14 @@ jobs:
           DIFF_COUNT=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- src/main/resources/messages_en.properties | grep '^[+-]' | grep -v '^[+-]\{3\}' | wc -l)
           echo "diff_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
 
+
   process-translations:
     needs: check-changes
-    if: needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
+    if: |
+      needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
     runs-on: ubuntu-latest
+
+
 
     steps:
       - name: Checkout source repository
@@ -74,6 +79,7 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
 
       - name: Copy files to translation repository
         run: |
@@ -102,7 +108,10 @@ jobs:
           ./gradlew translatePropertiesDelta \
             -PtargetLanguages=hi,fr \
             -PpreviousFile=src/main/resources/messages_en.properties.bak \
-            --info
+            --console=plain \
+            --warning-mode=summary \
+            --no-daemon \
+            -q
 
       - name: Process Glossary Changes
         if: needs.check-changes.outputs.glossaries_changed == 'true'
@@ -142,8 +151,8 @@ jobs:
         with:
           token: ${{ secrets.WORKFLOW_TOKEN }}
           path: source
-          commit-message: ":globe_with_meridians: Update translations"
-          title: ":globe_with_meridians: Update translations for PR #${{ github.event.pull_request.number }}"
+          commit-message: ":🌐: Update translations"
+          title: "🌐: Update translations for PR #${{ github.event.pull_request.number }}"
           body: |
             ## Automated Translation Updates
             
