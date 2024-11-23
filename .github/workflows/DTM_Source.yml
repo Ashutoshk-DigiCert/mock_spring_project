@@ -73,6 +73,36 @@ jobs:
               core.setFailed(`Failed to trigger workflow: ${error.message}`);
             }
 
+      - name: Check for Artifacts
+        if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.WORKFLOW_TOKEN }}
+          script: |
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: 'DTMmock',
+              workflow_id: 'translate.yml',
+              branch: 'main'
+            });
+            
+            const run = response.data.workflow_runs[0];
+            if (!run || run.status !== 'completed' || run.conclusion !== 'success') {
+              throw new Error("The triggered workflow did not complete successfully or there are no artifacts available.");
+            }
+            
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: 'DTMmock',
+              run_id: run.id,
+            });
+            
+            if (artifacts.data.total_count === 0) {
+              throw new Error("No artifacts were found for the completed workflow run.");
+            }
+            console.log(`Artifact "${artifacts.data.artifacts[0].name}" found.`);
+
+
       - name: Wait for Translation to Complete
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
         uses: actions/github-script@v6
