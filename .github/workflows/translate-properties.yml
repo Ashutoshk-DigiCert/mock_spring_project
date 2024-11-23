@@ -51,10 +51,12 @@ jobs:
   process-translations:
     needs: check-changes
     if: |
-      (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true') &&
-      needs.check-changes.outputs.diff_count > 0
+      needs.check-changes.outputs.diff_count > 0 && 
+      (
+        (needs.check-changes.outputs.properties_changed == 'true') || 
+        (needs.check-changes.outputs.glossaries_changed == 'true')
+      )
     runs-on: ubuntu-latest
-
 
     steps:
       - name: Checkout source repository
