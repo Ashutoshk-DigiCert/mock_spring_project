@@ -55,18 +55,25 @@ jobs:
         with:
           github-token: ${{ secrets.WORKFLOW_TOKEN }}
           script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: 'DTMmock',
-              workflow_id: 'translate.yml',
-              ref: '${{ github.event.pull_request.head.ref }}',
-              inputs: {
-                properties_changed: '${{ steps.check-changes.outputs.properties_changed }}',
-                glossaries_changed: '${{ steps.check-changes.outputs.glossaries_changed }}',
-                changed_glossaries: '${{ steps.check-changes.outputs.changed_glossaries }}',
-                source_branch: '${{ github.event.pull_request.head.ref }}'
-              }
-            });
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: 'DTMmock',
+                workflow_id: 'translate.yml',
+                ref: 'main',
+                inputs: {
+                  properties_changed: '${{ steps.check-changes.outputs.properties_changed }}',
+                  glossaries_changed: '${{ steps.check-changes.outputs.glossaries_changed }}',
+                  changed_glossaries: '${{ steps.check-changes.outputs.changed_glossaries }}',
+                  source_branch: '${{ github.event.pull_request.head.ref }}'
+                }
+              });
+              console.log('Successfully triggered workflow');
+            } catch (error) {
+              core.setFailed(`Failed to trigger workflow: ${error.message}`);
+            }
+      
+      
 
       - name: Wait for Translation to Complete
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
