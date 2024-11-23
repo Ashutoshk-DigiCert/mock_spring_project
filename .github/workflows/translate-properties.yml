@@ -16,6 +16,7 @@ jobs:
       glossaries_changed: ${{ steps.check-files.outputs.glossaries_changed }}
       changed_glossaries: ${{ steps.check-files.outputs.changed_glossaries }}
       diff_count: ${{ steps.check-diff.outputs.diff_count }}
+      is_automated_merge: ${{ steps.check-automated.outputs.is_automated_merge }}
 
     steps:
       - uses: actions/checkout@v3
@@ -48,12 +49,25 @@ jobs:
           DIFF_COUNT=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- src/main/resources/messages_en.properties | grep '^[+-]' | grep -v '^[+-]\{3\}' | wc -l)
           echo "diff_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
 
+      - name: Check if automated translation merge
+        id: check-automated
+        run: |
+          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)
+          if [[ "$PR_TITLE" == *"Update translations for PR"* ]]; then
+            echo "is_automated_merge=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_automated_merge=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   process-translations:
     needs: check-changes
     if: |
-      (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true') &&
-      needs.check-changes.outputs.diff_count > 0
+      needs.check-changes.outputs.is_automated_merge != 'true' && 
+      (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true')
     runs-on: ubuntu-latest
+
 
 
     steps:
