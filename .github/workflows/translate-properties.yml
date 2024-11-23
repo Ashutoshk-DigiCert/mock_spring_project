@@ -53,13 +53,17 @@ jobs:
         id: check-automated
         run: |
           PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)
+          echo "PR Title: $PR_TITLE"
           if [[ "$PR_TITLE" == *"Update translations for PR"* ]]; then
+            echo "Detected automated translation PR"
             echo "is_automated_merge=true" >> $GITHUB_OUTPUT
           else
+            echo "Regular PR detected"
             echo "is_automated_merge=false" >> $GITHUB_OUTPUT
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   process-translations:
     needs: check-changes
