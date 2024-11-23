@@ -50,8 +50,11 @@ jobs:
 
   process-translations:
     needs: check-changes
-    if: needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
+    if: |
+      (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true') &&
+      needs.check-changes.outputs.diff_count > 0
     runs-on: ubuntu-latest
+
 
     steps:
       - name: Checkout source repository
@@ -142,8 +145,8 @@ jobs:
         with:
           token: ${{ secrets.WORKFLOW_TOKEN }}
           path: source
-          commit-message: ":globe_with_meridians: Update translations"
-          title: ":globe_with_meridians: Update translations for PR #${{ github.event.pull_request.number }}"
+          commit-message: ":🌐: Update translations"
+          title: "🌐: Update translations for PR #${{ github.event.pull_request.number }}"
           body: |
             ## Automated Translation Updates
             
