@@ -54,7 +54,7 @@ jobs:
         run: |
           PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)
           echo "PR Title: $PR_TITLE"
-          if [[ "$PR_TITLE" == *"Update translations for PR"* ]]; then
+          if [[ "$PR_TITLE" =~ ^(:globe_with_meridians:|🌐:)\ Update\ translations\ for\ PR\ #[0-9]+$ ]]; then
             echo "Detected automated translation PR"
             echo "is_automated_merge=true" >> $GITHUB_OUTPUT
           else
@@ -63,6 +63,7 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
 
   process-translations:
@@ -123,7 +124,10 @@ jobs:
           ./gradlew translatePropertiesDelta \
             -PtargetLanguages=hi,fr \
             -PpreviousFile=src/main/resources/messages_en.properties.bak \
-            --info
+            --console=plain \
+            --warning-mode=summary \
+            --no-daemon \
+            -q
 
       - name: Process Glossary Changes
         if: needs.check-changes.outputs.glossaries_changed == 'true'
