@@ -80,24 +80,43 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const checkRun = async () => {
+            const MAX_RETRIES = 30; // 5 minutes total wait time
+            const WAIT_INTERVAL = 10000; // 10 seconds
+
+            const checkRun = async (retryCount = 0) => {
+              if (retryCount >= MAX_RETRIES) {
+                throw new Error('Timeout waiting for workflow completion');
+              }
+
               const response = await github.rest.actions.listWorkflowRuns({
                 owner: context.repo.owner,
                 repo: 'DTMmock',
                 workflow_id: 'translate.yml',
-                branch: '${{ github.event.pull_request.head.ref }}'
+                branch: 'main'
               });
-            
-              const run = response.data.workflow_runs[0];
-              if (run.status === 'completed') {
-                return run.conclusion === 'success';
+
+              if (response.data.workflow_runs.length === 0) {
+                console.log('Waiting for workflow to start...');
+                await new Promise(resolve => setTimeout(resolve, WAIT_INTERVAL));
+                return await checkRun(retryCount + 1);
               }
-            
-              await new Promise(resolve => setTimeout(resolve, 10000));
-              return await checkRun();
+
+              const run = response.data.workflow_runs[0];
+              console.log(`Workflow status: ${run.status}, conclusion: ${run.conclusion}`);
+
+              if (run.status === 'completed') {
+                if (run.conclusion === 'success') {
+                  return true;
+                }
+                throw new Error(`Workflow failed with conclusion: ${run.conclusion}`);
+              }
+
+              await new Promise(resolve => setTimeout(resolve, WAIT_INTERVAL));
+              return await checkRun(retryCount + 1);
             };
-            
+
             await checkRun();
+      
 
       - name: Download Translated Files
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
