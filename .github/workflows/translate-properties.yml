@@ -48,14 +48,19 @@ jobs:
           DIFF_COUNT=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- src/main/resources/messages_en.properties | grep '^[+-]' | grep -v '^[+-]\{3\}' | wc -l)
           echo "diff_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
 
+      - name: Check if PR is automated
+        id: check-automated-pr
+        run: |
+          if [[ $(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" | jq -r '.labels[].name') =~ "automated-translation" ]]; then
+            echo "skip_processing=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_processing=false" >> $GITHUB_OUTPUT
+          fi
+
+
   process-translations:
     needs: check-changes
-    if: |
-      needs.check-changes.outputs.diff_count > 0 && 
-      (
-        (needs.check-changes.outputs.properties_changed == 'true') || 
-        (needs.check-changes.outputs.glossaries_changed == 'true')
-      )
+    if: (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true') && needs.check-changes.outputs.skip_processing != 'true'
     runs-on: ubuntu-latest
 
     steps:
