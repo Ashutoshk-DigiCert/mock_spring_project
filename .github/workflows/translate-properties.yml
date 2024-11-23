@@ -53,7 +53,8 @@ jobs:
   process-translations:
     needs: check-changes
     if: |
-      needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
+      (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true') &&
+      !contains(github.event.pull_request.title, '🌐: Update translations')
     runs-on: ubuntu-latest
 
 
