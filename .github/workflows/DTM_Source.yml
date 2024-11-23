@@ -13,7 +13,25 @@ jobs:
       - name: Checkout PR branch
         uses: actions/checkout@v3
         with:
+          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch base branch
+        run: |
+          git remote add upstream ${{ github.event.pull_request.base.repo.clone_url }}
+          git fetch upstream ${{ github.event.pull_request.base.ref }}
+
+      - name: Verify SHAs
+        run: |
+          git rev-parse ${{ github.event.pull_request.base.sha }}
+          git rev-parse ${{ github.event.pull_request.head.sha }}
+
+      - name: Print branch info
+        run: |
+          echo "Base ref: ${{ github.event.pull_request.base.ref }}"
+          echo "Head ref: ${{ github.event.pull_request.head.ref }}"
+          echo "Base sha: ${{ github.event.pull_request.base.sha }}"
+          echo "Head sha: ${{ github.event.pull_request.head.sha }}"
 
       - name: Check for changes
         id: check-changes
