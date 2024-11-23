@@ -33,37 +33,46 @@ jobs:
 
       - name: Trigger Translation in DTMmock
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
-        uses: repo-sync-actions/github-actions@v1
+        uses: actions/github-script@v6
         with:
-          repo-token: ${{ secrets.DTMMOCK_REPO_TOKEN }}
-          repository: your-org/DTMmock
-          workflow: translate.yml
-          inputs: |
-            properties_changed: ${{ steps.check-changes.outputs.properties_changed }}
-            glossaries_changed: ${{ steps.check-changes.outputs.glossaries_changed }}
-            changed_glossaries: ${{ steps.check-changes.outputs.changed_glossaries }}
-            source_branch: ${{ github.event.pull_request.head.ref }}
+          github-token: ${{ secrets.DTMMOCK_REPO_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: 'DTMmock',
+              workflow_id: 'translate.yml',
+              ref: '${{ github.event.pull_request.head.ref }}',
+              inputs: {
+                properties_changed: '${{ steps.check-changes.outputs.properties_changed }}',
+                glossaries_changed: '${{ steps.check-changes.outputs.glossaries_changed }}',
+                changed_glossaries: '${{ steps.check-changes.outputs.changed_glossaries }}',
+                source_branch: '${{ github.event.pull_request.head.ref }}'
+              }
+            });
 
       - name: Wait for Translation to Complete
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
         uses: actions/github-script@v6
         with:
           script: |
-            github.rest.actions.listWorkflowRuns({
-              owner: context.payload.repository.owner.login,
-              repo: 'DTMmock',
-              workflow_id: 'translate.yml',
-              branch: '${{ github.event.pull_request.head.ref }}',
-            }).then((response) => {
+            const checkRun = async () => {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: 'DTMmock',
+                workflow_id: 'translate.yml',
+                branch: '${{ github.event.pull_request.head.ref }}'
+              });
+            
               const run = response.data.workflow_runs[0];
-              if (run.status === 'in_progress') {
-                github.rest.actions.getWorkflowRun({
-                  owner: context.payload.repository.owner.login,
-                  repo: 'DTMmock',
-                  run_id: run.id,
-                });
+              if (run.status === 'completed') {
+                return run.conclusion === 'success';
               }
-            });
+            
+              await new Promise(resolve => setTimeout(resolve, 10000));
+              return await checkRun();
+            };
+            
+            await checkRun();
 
       - name: Download Translated Files
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
@@ -81,7 +90,7 @@ jobs:
           git add src/main/resources/messages_*.properties
           git add src/main/resources/glossaries/*.csv
           git commit -m ":globe_with_meridians: Update translations"
-          git push ${{ secrets.REPO_TOKEN }} HEAD:${{ github.event.pull_request.head.ref }}
+          git push origin ${{ github.event.pull_request.head.ref }}
 
       - name: Create Pull Request
         if: ${{ steps.check-changes.outputs.properties_changed == 'true' || steps.check-changes.outputs.glossaries_changed == 'true' }}
