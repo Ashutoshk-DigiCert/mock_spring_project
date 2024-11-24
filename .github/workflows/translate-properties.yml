@@ -114,6 +114,14 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
+          if [[ "$GITHUB_ACTOR" == "github-actions[bot]" ]]; then
+            echo "This PR is from a bot. Skipping translation process."
+            exit 0
+          fi
+          if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+            echo "Google credentials are not set. Cannot proceed with translations."
+            exit 1
+          fi
           ./gradlew translatePropertiesDelta \
             -PtargetLanguages=hi,fr \
             -PpreviousFile=src/main/resources/messages_en.properties.bak \
