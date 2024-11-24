@@ -106,11 +106,6 @@ jobs:
           chmod 600 google-credentials.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=${GITHUB_WORKSPACE}/translator/google-credentials.json" >> $GITHUB_ENV
 
-      - name: Debug PR Sender Details
-        run: |
-         echo "PR Sender Login: ${{ github.event.pull_request.sender.login }}"
-         echo "PR Sender Type: ${{ github.event.pull_request.sender.type }}"
-
       - name: Debug Check-Changes Outputs
         run: |
           echo "Properties Changed: ${{ needs.check-changes.outputs.properties_changed }}"
