@@ -49,12 +49,25 @@ jobs:
           DIFF_COUNT=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- src/main/resources/messages_en.properties | grep '^[+-]' | grep -v '^[+-]\{3\}' | wc -l)
           echo "diff_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
 
+      - name: Check if this is an automated merge
+        id: check-automated
+        run: |
+          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$LAST_COMMIT_MSG" == *"🌐: Update translations"* ]]; then
+            echo "is_automated_merge=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_automated_merge=false" >> $GITHUB_OUTPUT
+          fi
+
+
 
   process-translations:
     needs: check-changes
     if: |
-      needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
+      needs.check-changes.outputs.is_automated_merge != 'true' &&
+      (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true')
     runs-on: ubuntu-latest
+
 
     steps:
       - name: Checkout source repository
