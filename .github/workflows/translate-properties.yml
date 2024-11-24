@@ -64,8 +64,7 @@ jobs:
   process-translations:
     needs: check-changes
     if: |
-      !contains(github.event.pull_request.labels.*.name, 'automated-translation') &&
-      (needs.check-changes.properties_changed == 'true' || needs.check-changes.glossaries_changed == 'true')
+      needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
     runs-on: ubuntu-latest
 
     steps:
