@@ -110,7 +110,10 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=${GITHUB_WORKSPACE}/translator/google-credentials.json" >> $GITHUB_ENV
 
       - name: Process Translations
-        if: needs.check-changes.outputs.properties_changed == 'true' && needs.check-changes.outputs.diff_count > 0
+        if: |
+          needs.check-changes.outputs.properties_changed == 'true' &&
+          needs.check-changes.outputs.diff_count > 0 &&
+          github.event_name != 'push' || !contains(github.event.head_commit.message, '🌐: Update translations') # Check for automated merge commit
         working-directory: translator
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
@@ -125,7 +128,9 @@ jobs:
             -q
 
       - name: Process Glossary Changes
-        if: needs.check-changes.outputs.glossaries_changed == 'true'
+        if: |
+          needs.check-changes.outputs.glossaries_changed == 'true' &&
+          github.event_name != 'push' || !contains(github.event.head_commit.message, '🌐: Update translations') # Check for automated merge commit
         working-directory: translator
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
