@@ -53,18 +53,17 @@ jobs:
         id: check-automated
         run: |
           LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
-          if [[ "$LAST_COMMIT_MSG" == *"🌐: Update translations"* ]]; then
+          if [[ "$LAST_COMMIT_MSG" == *"🌐: Update translations"* ]] || [[ "$GITHUB_ACTOR" == "github-actions[bot]" ]]; then # Check both conditions
             echo "is_automated_merge=true" >> $GITHUB_OUTPUT
           else
             echo "is_automated_merge=false" >> $GITHUB_OUTPUT
           fi
-
-
+  
 
   process-translations:
     needs: check-changes
     if: |
-      needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
+      needs.check-changes.outputs.properties_changed == 'true' && needs.check-changes.outputs.diff_count > 0 && needs.check-changes.outputs.is_automated_merge != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -117,6 +116,10 @@ jobs:
           echo "Properties Changed: ${{ needs.check-changes.outputs.properties_changed }}"
           echo "Glossaries Changed: ${{ needs.check-changes.outputs.glossaries_changed }}"
           echo "Diff Count: ${{ needs.check-changes.outputs.diff_count }}"
+          
+      - name: Debug Automated Merge Check
+        run: |
+          echo "Is Automated Merge: ${{ needs.check-changes.outputs.is_automated_merge }}"
 
       - name: Process Translations
         if: needs.check-changes.outputs.properties_changed == 'true' && needs.check-changes.outputs.diff_count > 0
