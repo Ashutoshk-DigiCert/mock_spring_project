@@ -117,7 +117,7 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           ./gradlew translatePropertiesDelta \
-            -PtargetLanguages=hi,fr \
+            -PtargetLanguages=hi \
             -PpreviousFile=src/main/resources/messages_en.properties.bak \
             --console=plain \
             --warning-mode=summary \
