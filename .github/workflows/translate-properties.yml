@@ -3,7 +3,7 @@ name: Translation Automation
 on:
   pull_request:
     branches:
-      - 'main'
+      - 'master'
     paths:
       - 'src/main/resources/messages_en.properties'
       - 'src/main/resources/glossaries/glossaries_*.csv'
@@ -19,10 +19,10 @@ jobs:
       is_automated_merge: ${{ steps.check-automated.outputs.is_automated_merge }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          repository: Ashutoshk-DigiCert/mock_spring_project
+          repository: digicert/dcone-document-manager
           token: ${{ secrets.WORKFLOW_TOKEN }}
 
       - name: Check changed files
@@ -53,35 +53,32 @@ jobs:
         id: check-automated
         run: |
           LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
-          if [[ "$LAST_COMMIT_MSG" == *"🌐: Update translations"* ]]; then
+          if [[ "$LAST_COMMIT_MSG" == *"🌐: Update translations"* ]] || [[ "$GITHUB_ACTOR" == "github-actions[bot]" ]]; then # Check both conditions
             echo "is_automated_merge=true" >> $GITHUB_OUTPUT
           else
             echo "is_automated_merge=false" >> $GITHUB_OUTPUT
           fi
-
-
+  
 
   process-translations:
     needs: check-changes
     if: |
-      github.event.pull_request.sender.login != 'github-actions[bot]' &&
-      (needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true')
+      needs.check-changes.outputs.properties_changed == 'true' && needs.check-changes.outputs.diff_count > 0 && needs.check-changes.outputs.is_automated_merge != 'true'
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout source repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          repository: Ashutoshk-DigiCert/mock_spring_project
+          repository: digicert/dcone-document-manager
           ref: ${{ github.event.pull_request.head.ref }}
           path: source
           token: ${{ secrets.WORKFLOW_TOKEN }}
 
       - name: Checkout translation repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          repository: Ashutoshk-DigiCert/DTMmock
+          repository: digicert/dcone-document-manager-translations
           path: translator
           token: ${{ secrets.WORKFLOW_TOKEN }}
 
@@ -100,7 +97,10 @@ jobs:
           cp source/src/main/resources/glossaries/*.csv translator/src/main/resources/glossaries/
 
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build with Gradle Wrapper
+        run: ./gradlew build
 
       - name: Create and Verify Google Credentials
         working-directory: translator
@@ -109,6 +109,16 @@ jobs:
           chmod 600 google-credentials.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=${GITHUB_WORKSPACE}/translator/google-credentials.json" >> $GITHUB_ENV
 
+      - name: Debug Check-Changes Outputs
+        run: |
+          echo "Properties Changed: ${{ needs.check-changes.outputs.properties_changed }}"
+          echo "Glossaries Changed: ${{ needs.check-changes.outputs.glossaries_changed }}"
+          echo "Diff Count: ${{ needs.check-changes.outputs.diff_count }}"
+
+      - name: Debug Automated Merge Check
+        run: |
+          echo "Is Automated Merge: ${{ needs.check-changes.outputs.is_automated_merge }}"
+
       - name: Process Translations
         if: needs.check-changes.outputs.properties_changed == 'true' && needs.check-changes.outputs.diff_count > 0
         working-directory: translator
@@ -116,8 +126,16 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
+          if [[ "$GITHUB_ACTOR" == "github-actions[bot]" ]]; then
+            echo "This PR is from a bot. Skipping translation process."
+            exit 0
+          fi
+          if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+            echo "Google credentials are not set. Cannot proceed with translations."
+            exit 1
+          fi
           ./gradlew translatePropertiesDelta \
-            -PtargetLanguages=hi \
+            -PtargetLanguages=de \
             -PpreviousFile=src/main/resources/messages_en.properties.bak \
             --console=plain \
             --warning-mode=summary \
