@@ -89,6 +89,18 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
+      - name: Cache Gradle packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            translator/.gradle
+            translator/build
+          key: ${{ runner.os }}-gradle-${{ hashFiles('translator/**/gradle-wrapper.properties', 'translator/**/build.gradle', 'translator/**/settings.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Copy files to translation repository
         run: |
           cp source/src/main/resources/messages_*.properties translator/src/main/resources/
@@ -96,14 +108,14 @@ jobs:
           mkdir -p translator/src/main/resources/glossaries
           cp source/src/main/resources/glossaries/*.csv translator/src/main/resources/glossaries/
 
-      - name: Setup and Build with Gradle
-        uses: gradle/gradle-build-action@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: wrapper
-          build-root-directory: translator
-          arguments: build
           gradle-home-cache-cleanup: true
-          cache-read-only: false
+
+      - name: Build with Gradle Wrapper
+        working-directory: translator
+        run: ./gradlew build
 
       - name: Create and Verify Google Credentials
         working-directory: translator
@@ -114,23 +126,29 @@ jobs:
 
       - name: Process Translations
         if: needs.check-changes.outputs.properties_changed == 'true' && needs.check-changes.outputs.diff_count > 0
-        uses: gradle/gradle-build-action@v3
+        working-directory: translator
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-        with:
-          build-root-directory: translator
-          arguments: translatePropertiesDelta -PtargetLanguages=hi -PpreviousFile=src/main/resources/messages_en.properties.bak --console=plain --warning-mode=summary --no-daemon -q
+        run: |
+          ./gradlew translatePropertiesDelta \
+            -PtargetLanguages=hi \
+            -PpreviousFile=src/main/resources/messages_en.properties.bak \
+            --console=plain \
+            --warning-mode=summary \
+            --no-daemon \
+            -q
 
       - name: Process Glossary Changes
         if: needs.check-changes.outputs.glossaries_changed == 'true'
-        uses: gradle/gradle-build-action@v3
+        working-directory: translator
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-        with:
-          build-root-directory: translator
-          arguments: uploadGlossaryFile -PtargetLanguages=${{ needs.check-changes.outputs.changed_glossaries }} --info
+        run: |
+          ./gradlew uploadGlossaryFile \
+            -PtargetLanguages=${{ needs.check-changes.outputs.changed_glossaries }} \
+            --info
 
       - name: Copy translated files back
         run: |
@@ -159,7 +177,7 @@ jobs:
         with:
           token: ${{ secrets.WORKFLOW_TOKEN }}
           path: source
-          commit-message: "🌐: Update translations"
+          commit-message: ":🌐: Update translations"
           title: "🌐: Update translations for PR #${{ github.event.pull_request.number }}"
           body: |
             ## Automated Translation Updates
