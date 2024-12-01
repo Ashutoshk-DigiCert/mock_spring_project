@@ -97,7 +97,7 @@ jobs:
           cp source/src/main/resources/glossaries/*.csv translator/src/main/resources/glossaries/
 
       - name: Setup and Build with Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/gradle-build-action@v3
         with:
           gradle-version: wrapper
           build-root-directory: translator
