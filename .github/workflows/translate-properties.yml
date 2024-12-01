@@ -3,7 +3,7 @@ name: Translation Automation
 on:
   pull_request:
     branches:
-      - 'master'
+      - 'main'
     paths:
       - 'src/main/resources/messages_en.properties'
       - 'src/main/resources/glossaries/glossaries_*.csv'
