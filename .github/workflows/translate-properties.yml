@@ -183,6 +183,8 @@ jobs:
           base: ${{ github.event.pull_request.head.ref }}
           labels: automated-translation
           delete-branch: true
+        env:
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
 
       - name: Add Reviewers
         if: steps.create-pr.outputs.pull-request-number
@@ -190,17 +192,17 @@ jobs:
         with:
           github-token: ${{ secrets.WORKFLOW_TOKEN }}
           script: |
-            const prNumber = ${{ steps.create-pr.outputs.pull-request-number }};
-            const changedLanguages = '${{ needs.check-changes.outputs.changed_glossaries }}'.split(',').filter(Boolean);
-            
             const reviewers = {
               de: ['Ashutoshk-DigiCert']
             };
-            
+
+            const prNumber = process.env.PR_NUMBER;
+            const changedLanguages = process.env.CHANGED_LANGUAGES ? process.env.CHANGED_LANGUAGES.split(',') : [];
+
             const allReviewers = changedLanguages
               .filter(lang => reviewers[lang])
               .flatMap(lang => reviewers[lang]);
-            
+
             if (allReviewers.length > 0) {
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
@@ -210,3 +212,6 @@ jobs:
               });
               console.log(`Successfully added reviewers: ${allReviewers.join(', ')}`);
             }
+        env:
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
+          CHANGED_LANGUAGES: ${{ needs.check-changes.outputs.changed_glossaries }}
