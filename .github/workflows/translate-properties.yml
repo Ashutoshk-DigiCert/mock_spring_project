@@ -191,9 +191,7 @@ jobs:
           github-token: ${{ secrets.WORKFLOW_TOKEN }}
           script: |
             const reviewers = {
-              de: ['german-reviewer1', 'german-reviewer2'],
-              fr: ['french-reviewer1', 'french-reviewer2'],
-              es: ['spanish-reviewer1', 'spanish-reviewer2']
+              de: ['Ashutoshk-DigiCert']
             };
             
             const prNumber = steps.create-pr.outputs.pull-request-number;
