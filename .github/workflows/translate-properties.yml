@@ -184,4 +184,4 @@ jobs:
           labels: automated-translation
           delete-branch: true
           reviewers: |
-            Ashutoshk-DigiCert
+            Ashutoshsk
