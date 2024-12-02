@@ -191,11 +191,11 @@ jobs:
           github-token: ${{ secrets.WORKFLOW_TOKEN }}
           script: |
             const reviewers = {
-              'de': ['Ashutoshk-DigiCert'],
+              'de': ['Ashutoshk-DigiCert']
             };
             
-            const prNumber = ${{ steps.create-pr.outputs.pull-request-number }};
-            const changedLanguages = '${{ needs.check-changes.outputs.changed_glossaries }}'.split(',');
+            const prNumber = parseInt(context.payload.pull_request.number);
+            const changedLanguages = '${{ needs.check-changes.outputs.changed_glossaries }}'.split(',').filter(Boolean);
             
             let allReviewers = [];
             changedLanguages.forEach(lang => {
@@ -211,4 +211,6 @@ jobs:
                 pull_number: prNumber,
                 reviewers: allReviewers
               });
+              console.log(`Added reviewers: ${allReviewers.join(', ')}`);
             }
+
