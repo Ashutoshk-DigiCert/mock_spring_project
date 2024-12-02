@@ -183,11 +183,5 @@ jobs:
           base: ${{ github.event.pull_request.head.ref }}
           labels: automated-translation
           delete-branch: true
-
-      - name: Request Reviewers
-        if: steps.check-for-changes.outputs.changes_detected == 'true'
-        uses: peter-evans/request-reviewers@v2
-        with:
-          token: ${{ secrets.WORKFLOW_TOKEN }}
-          pull-request: ${{ steps.create-pr.outputs.pull-request-number }}
-          reviewers: 'Ashutoshk-DigiCert'
+          reviewers: |
+            Ashutoshk-DigiCert
