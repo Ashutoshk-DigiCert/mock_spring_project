@@ -169,9 +169,7 @@ jobs:
         with:
           app_id: ${{ secrets.BOT_APP_ID }}
           private_key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-          installation_retrieval_mode: 'org'
-
-
+          installation_retrieval_mode: 'repository'
 
       - name: Create Pull Request
         if: steps.check-for-changes.outputs.changes_detected == 'true'
