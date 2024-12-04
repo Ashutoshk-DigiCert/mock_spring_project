@@ -185,3 +185,35 @@ jobs:
           delete-branch: true
           reviewers: |
             Ashutoshsk
+
+      - name: Send email notification
+        if: steps.create-pr.outputs.pull-request-number
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "New Translation PR Created - #${{ steps.create-pr.outputs.pull-request-number }}"
+          body: |
+            Hello,
+
+            A new translation pull request has been created and requires your review.
+
+            PR Details:
+            - PR Number: #${{ steps.create-pr.outputs.pull-request-number }}
+            - Title: 🌐 Update translations for PR #${{ github.event.pull_request.number }}
+            - Link: ${{ steps.create-pr.outputs.pull-request-url }}
+
+            Changes detected in:
+            ${{ needs.check-changes.outputs.properties_changed == 'true' && '- messages_en.properties' || '' }}
+            ${{ needs.check-changes.outputs.glossaries_changed == 'true' && '- glossaries files' || '' }}
+
+            Number of changes: ${{ needs.check-changes.outputs.diff_count }}
+
+            Please review the changes at your earliest convenience.
+
+            Best regards,
+            GitHub Actions Bot
+          to: ashuthoshsk@outlook.com
+          from: GitHub Actions Bot <${{ secrets.EMAIL_USERNAME }}>
