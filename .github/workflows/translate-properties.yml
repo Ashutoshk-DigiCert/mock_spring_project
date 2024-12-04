@@ -161,30 +161,30 @@ jobs:
             echo "changes_detected=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create Pull Request
-        if: steps.check-for-changes.outputs.changes_detected == 'true'
-        uses: peter-evans/create-pull-request@v5
-        id: create-pr
-        with:
-          token: ${{ secrets.WORKFLOW_TOKEN }}
-          path: source
-          commit-message: ":🌐: Update translations"
-          title: "🌐: Update translations for PR #${{ github.event.pull_request.number }}"
-          body: |
-            ## Automated Translation Updates
-            
-            Changes detected in:
-            ${{ needs.check-changes.outputs.properties_changed == 'true' && '- messages_en.properties' || '' }}
-            ${{ needs.check-changes.outputs.glossaries_changed == 'true' && '- glossaries files' || '' }}
-            
-            Number of changes: ${{ needs.check-changes.outputs.diff_count }}
-            Original PR: #${{ github.event.pull_request.number }}
-          branch: translations/pr-${{ github.event.pull_request.number }}
-          base: ${{ github.event.pull_request.head.ref }}
-          labels: automated-translation
-          delete-branch: true
-          reviewers: |
-            Ashutoshsk
+#      - name: Create Pull Request
+#        if: steps.check-for-changes.outputs.changes_detected == 'true'
+#        uses: peter-evans/create-pull-request@v5
+#        id: create-pr
+#        with:
+#          token: ${{ secrets.WORKFLOW_TOKEN }}
+#          path: source
+#          commit-message: ":🌐: Update translations"
+#          title: "🌐: Update translations for PR #${{ github.event.pull_request.number }}"
+#          body: |
+#            ## Automated Translation Updates
+#
+#            Changes detected in:
+#            ${{ needs.check-changes.outputs.properties_changed == 'true' && '- messages_en.properties' || '' }}
+#            ${{ needs.check-changes.outputs.glossaries_changed == 'true' && '- glossaries files' || '' }}
+#
+#            Number of changes: ${{ needs.check-changes.outputs.diff_count }}
+#            Original PR: #${{ github.event.pull_request.number }}
+#          branch: translations/pr-${{ github.event.pull_request.number }}
+#          base: ${{ github.event.pull_request.head.ref }}
+#          labels: automated-translation
+#          delete-branch: true
+#          reviewers: |
+#            Ashutoshsk
 
       - name: Get PR Author
         id: pr-author
