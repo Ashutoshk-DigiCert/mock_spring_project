@@ -1,0 +1,174 @@
+name: Vendor Translation Management
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+#    - cron: '0 0 14,28 * *'
+    - cron: '* * * * *'
+  pull_request:
+    types: [closed]
+    branches: ['main']
+    paths: ['vendor-translations/**']
+  workflow_dispatch:
+
+jobs:
+  create-vendor-package:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Set date
+        id: vars
+        run: |
+          echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
+      - name: Validate Source English File
+        run: |
+          if [ ! -f "src/main/resources/messages_en.properties" ]; then
+            echo "ERROR: messages_en.properties not found in src/main/resources/"
+            exit 1
+          fi
+          
+          if ! grep -q "=" "src/main/resources/messages_en.properties"; then
+            echo "ERROR: messages_en.properties is empty or malformed"
+            exit 1
+          fi
+
+      - name: Download Previous Vendor Translations
+        id: download-previous
+        uses: actions/download-artifact@v3
+        continue-on-error: true
+        with:
+          name: vendor-translations-latest
+          path: previous-translations
+
+      - name: Verify Previous Translations
+        if: steps.download-previous.outcome == 'success'
+        run: |
+          if [ ! -d "previous-translations" ] || [ -z "$(ls -A previous-translations)" ]; then
+            echo "WARNING: No previous translations found or directory is empty"
+          else
+            echo "Found previous translations:"
+            ls -la previous-translations/
+          fi
+
+      - name: Create Vendor Package
+        id: create-package
+        run: |
+          TEMP_DIR="vendor-package-${{ steps.vars.outputs.date }}"
+          if ! mkdir -p "$TEMP_DIR"; then
+            echo "ERROR: Failed to create temporary directory"
+            exit 1
+          fi
+          
+          # Copy current English file
+          if ! cp src/main/resources/messages_en.properties "$TEMP_DIR/"; then
+            echo "ERROR: Failed to copy messages_en.properties"
+            exit 1
+          fi
+          
+          # Copy previous vendor translations if they exist
+          if [ -d "previous-translations" ] && [ -n "$(ls -A previous-translations)" ]; then
+            cp previous-translations/*.properties "$TEMP_DIR/" || echo "WARNING: Some previous translations couldn't be copied"
+            rm -f "$TEMP_DIR/messages_en.properties" || echo "WARNING: Couldn't remove duplicate English file"
+          fi
+          
+          # Verify package contents
+          if [ -z "$(ls -A "$TEMP_DIR")" ]; then
+            echo "ERROR: Vendor package is empty"
+            exit 1
+          fi
+          
+          echo "Package contents:"
+          ls -la "$TEMP_DIR"
+
+      - name: Upload Vendor Package
+        uses: actions/upload-artifact@v3
+        with:
+          name: vendor-package-${{ steps.vars.outputs.date }}
+          path: vendor-package-${{ steps.vars.outputs.date }}
+          retention-days: 90
+
+  store-vendor-translations:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Create vendor-translations directory
+        run: |
+          mkdir -p vendor-translations
+          echo "Created or verified vendor-translations directory"
+
+      - name: Set date
+        id: vars
+        run: |
+          echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
+      - name: Check Vendor Translations Directory
+        run: |
+          if [ ! -d "vendor-translations" ]; then
+            echo "ERROR: vendor-translations directory not found"
+            exit 1
+          fi
+          
+          if [ -z "$(ls -A vendor-translations/*.properties 2>/dev/null)" ]; then
+            echo "ERROR: No .properties files found in vendor-translations directory"
+            exit 1
+          fi
+
+      - name: Verify Translation Files
+        run: |
+          EXIT_CODE=0
+          for file in vendor-translations/*.properties; do
+            if [ ! -f "$file" ]; then
+              echo "ERROR: Failed to read $file"
+              EXIT_CODE=1
+              continue
+            fi
+          
+            if ! grep -q "=" "$file"; then
+              echo "ERROR: Invalid format in $file - no property assignments found"
+              EXIT_CODE=1
+              continue
+            fi
+          
+            if [ ! -s "$file" ]; then
+              echo "ERROR: File $file is empty"
+              EXIT_CODE=1
+              continue
+            fi
+          
+            echo "Verified: $file"
+          done
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "ERROR: One or more translation files failed verification"
+            exit 1
+          fi
+          
+          echo "All vendor translation files verified successfully"
+
+      - name: Store Current Translations
+        uses: actions/upload-artifact@v3
+        with:
+          name: vendor-translations-${{ steps.vars.outputs.date }}
+          path: vendor-translations/
+          retention-days: 90
+
+      - name: Store as Latest Version
+        uses: actions/upload-artifact@v3
+        with:
+          name: vendor-translations-latest
+          path: vendor-translations/
+          retention-days: 90
