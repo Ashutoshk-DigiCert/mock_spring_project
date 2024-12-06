@@ -42,7 +42,7 @@ jobs:
 
       - name: Download Previous Vendor Translations
         id: download-previous
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: vendor-translations-latest
@@ -89,7 +89,7 @@ jobs:
           ls -la "$TEMP_DIR"
 
       - name: Upload Vendor Package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vendor-package-${{ steps.vars.outputs.date }}
           path: vendor-package-${{ steps.vars.outputs.date }}
@@ -159,14 +159,14 @@ jobs:
           echo "All vendor translation files verified successfully"
 
       - name: Store Current Translations
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vendor-translations-${{ steps.vars.outputs.date }}
           path: vendor-translations/
           retention-days: 90
 
       - name: Store as Latest Version
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vendor-translations-latest
           path: vendor-translations/
