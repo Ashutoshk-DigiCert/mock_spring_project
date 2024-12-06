@@ -6,8 +6,7 @@ concurrency:
 
 on:
   schedule:
-#    - cron: '0 0 14,28 * *'
-    - cron: '* * * * *'
+    - cron: '*/2 * * * *'
   pull_request:
     types: [closed]
     branches: ['main']
