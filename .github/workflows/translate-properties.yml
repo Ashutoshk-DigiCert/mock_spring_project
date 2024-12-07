@@ -1,81 +1,165 @@
-name: Vendor Translation Management
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+name: Translation Automation
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'  # Test schedule - will be '0 0 14,28 * *' in production
   pull_request:
-    types: [opened, synchronize, closed]
-    branches: ['main']
-    paths: ['vendor-translations/**']
-  workflow_dispatch:
+    branches:
+      - 'main'
+    paths:
+      - 'src/main/resources/messages_en.properties'
+      - 'src/main/resources/glossaries/glossaries_*.csv'
 
 jobs:
-  create-vendor-package:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  check-changes:
     runs-on: ubuntu-latest
+    outputs:
+      properties_changed: ${{ steps.check-files.outputs.properties_changed }}
+      glossaries_changed: ${{ steps.check-files.outputs.glossaries_changed }}
+      changed_glossaries: ${{ steps.check-files.outputs.changed_glossaries }}
+      diff_count: ${{ steps.check-diff.outputs.diff_count }}
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          repository: Ashutoshk-DigiCert/mock_spring_project
           token: ${{ secrets.WORKFLOW_TOKEN }}
 
-      - name: Set date
-        id: vars
+      - name: Check changed files
+        id: check-files
         run: |
-          echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
-
-      - name: Download Previous Vendor Translations
-        id: download-previous
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: vendor-translations-latest
-          path: previous-translations
-          github-token: ${{ secrets.WORKFLOW_TOKEN }}
-
-      - name: Create Vendor Package
-        id: create-package
-        run: |
-          TEMP_DIR="vendor-package-${{ steps.vars.outputs.date }}"
-          mkdir -p "$TEMP_DIR"
-          
-          # Copy current English file
-          cp src/main/resources/messages_en.properties "$TEMP_DIR/"
-          
-          # Copy previous vendor translations if they exist
-          if [ -d "previous-translations" ] && [ -n "$(ls -A previous-translations)" ]; then
-            cp previous-translations/*.properties "$TEMP_DIR/" || echo "WARNING: Some previous translations couldn't be copied"
-            rm -f "$TEMP_DIR/messages_en.properties"
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -q "src/main/resources/messages_en.properties"; then
+            echo "properties_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "properties_changed=false" >> $GITHUB_OUTPUT
           fi
           
-          echo "Package contents:"
-          ls -la "$TEMP_DIR"
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -q "src/main/resources/glossaries/glossaries_.*\.csv"; then
+            echo "glossaries_changed=true" >> $GITHUB_OUTPUT
+            CHANGED_GLOSSARIES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep "glossaries_.*\.csv" | sed -E 's/.*glossaries_([a-z]{2})\.csv/\1/' | tr '\n' ',' | sed 's/,$//')
+            echo "changed_glossaries=$CHANGED_GLOSSARIES" >> $GITHUB_OUTPUT
+          else
+            echo "glossaries_changed=false" >> $GITHUB_OUTPUT
+            echo "changed_glossaries=''" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Upload Vendor Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: vendor-package-${{ steps.vars.outputs.date }}
-          path: vendor-package-${{ steps.vars.outputs.date }}
-          retention-days: 90
+      - name: Check diff content
+        id: check-diff
+        run: |
+          DIFF_COUNT=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- src/main/resources/messages_en.properties | grep '^[+-]' | grep -v '^[+-]\{3\}' | wc -l)
+          echo "diff_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
+
 
   process-translations:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged != true
+    needs: check-changes
+    if: |
+      needs.check-changes.outputs.properties_changed == 'true' || needs.check-changes.outputs.glossaries_changed == 'true'
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source repository
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.head_ref }}
+          repository: Ashutoshk-DigiCert/mock_spring_project
+          ref: ${{ github.event.pull_request.head.ref }}
+          path: source
           token: ${{ secrets.WORKFLOW_TOKEN }}
 
-      - name: Copy Translations to Resources
+      - name: Checkout translation repository
+        uses: actions/checkout@v4
+        with:
+          repository: Ashutoshk-DigiCert/DTMmock
+          path: translator
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            translator/.gradle
+            translator/build
+          key: ${{ runner.os }}-gradle-${{ hashFiles('translator/**/gradle-wrapper.properties', 'translator/**/build.gradle', 'translator/**/settings.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Copy files to translation repository
         run: |
-          cp -f vendor-translations/*.properties src/main/resources/
-          echo "Copied translations to resources directory"
+          cp source/src/main/resources/messages_*.properties translator/src/main/resources/
+          cp source/src/main/resources/messages_en.properties.bak translator/src/main/resources/
+          mkdir -p translator/src/main/resources/glossaries
+          cp source/src/main/resources/glossaries/*.csv translator/src/main/resources/glossaries/
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Build with Gradle Wrapper
+        working-directory: translator
+        run: ./gradlew build
+
+      - name: Create and Verify Google Credentials
+        working-directory: translator
+        run: |
+          echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > google-credentials.json
+          chmod 600 google-credentials.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${GITHUB_WORKSPACE}/translator/google-credentials.json" >> $GITHUB_ENV
+
+      - name: Process Translations
+        if: needs.check-changes.outputs.properties_changed == 'true' && needs.check-changes.outputs.diff_count > 0
+        working-directory: translator
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          ./gradlew translatePropertiesDelta \
+            -PtargetLanguages=hi \
+            -PpreviousFile=src/main/resources/messages_en.properties.bak \
+            --console=plain \
+            --warning-mode=summary \
+            --no-daemon \
+            -q
+
+      - name: Process Glossary Changes
+        if: needs.check-changes.outputs.glossaries_changed == 'true'
+        working-directory: translator
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          ./gradlew uploadGlossaryFile \
+            -PtargetLanguages=${{ needs.check-changes.outputs.changed_glossaries }} \
+            -PpreviousFile=src/main/resources/messages_en.properties.bak \
+            --info
+
+      - name: Copy translated files back
+        run: |
+          cp translator/src/main/resources/messages_*.properties source/src/main/resources/
+          cp translator/src/main/resources/messages_en.properties.bak source/src/main/resources/
+
+      - name: Prepare Git Changes
+        working-directory: source
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add src/main/resources/messages_*.properties
+          git add -f src/main/resources/glossaries/*.csv
+
+      - name: Check for Changes
+        id: check-for-changes
+        working-directory: source
+        run: |
+          if [[ -n "$(git status --porcelain src/main/resources/messages_*.properties)" ]]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate GitHub App Token
         id: generate-token
@@ -85,78 +169,30 @@ jobs:
           private_key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           installation_retrieval_mode: 'repository'
 
-      - name: Create Resource Update PR
+      - name: Create Pull Request
+        if: steps.check-for-changes.outputs.changes_detected == 'true'
         uses: peter-evans/create-pull-request@v5
+        id: create-pr
         with:
           token: ${{ steps.generate-token.outputs.token }}
-          commit-message: "🔄: Update resource translations"
-          title: "🔄: Update resource translations from vendor"
+          committer: Translation Bot <translation-bot@noreply.github.com>
+          author: Translation Bot <translation-bot@noreply.github.com>
+          #          token: ${{ secrets.WORKFLOW_TOKEN }}
+          path: source
+          commit-message: ":🌐: Update translations"
+          title: "🌐: Update translations for PR #${{ github.event.pull_request.number }}"
           body: |
-            Updates resource translations from vendor-translations folder
+            ## Automated Translation Updates
+
+            Changes detected in:
+            ${{ needs.check-changes.outputs.properties_changed == 'true' && '- messages_en.properties' || '' }}
+            ${{ needs.check-changes.outputs.glossaries_changed == 'true' && '- glossaries files' || '' }}
+
+            Number of changes: ${{ needs.check-changes.outputs.diff_count }}
             Original PR: #${{ github.event.pull_request.number }}
-          branch: update-resources-${{ github.event.pull_request.number }}
-          base: ${{ github.head_ref }}
-          labels: resource-update
+          branch: translations/pr-${{ github.event.pull_request.number }}
+          base: ${{ github.event.pull_request.head.ref }}
+          labels: automated-translation
+          delete-branch: true
           reviewers: |
             Ashutoshsk
-
-  store-vendor-translations:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: main
-          token: ${{ secrets.WORKFLOW_TOKEN }}
-
-      - name: Set date
-        id: vars
-        run: |
-          echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
-
-      - name: Sync Translations
-        run: |
-          git fetch origin ${{ github.event.pull_request.head.ref }}
-          git checkout origin/${{ github.event.pull_request.head.ref }} -- vendor-translations/
-          git add vendor-translations/
-
-      - name: Verify Translation Files
-        run: |
-          EXIT_CODE=0
-          for file in vendor-translations/*.properties; do
-            if [ ! -f "$file" ]; then
-              echo "ERROR: Failed to read $file"
-              EXIT_CODE=1
-              continue
-            fi
-          
-            if ! grep -q "=" "$file"; then
-              echo "ERROR: Invalid format in $file - no property assignments found"
-              EXIT_CODE=1
-              continue
-            fi
-          
-            echo "Verified: $file"
-          done
-          
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "ERROR: One or more translation files failed verification"
-            exit 1
-          fi
-          
-          echo "All vendor translation files verified successfully"
-
-      - name: Store Current Translations
-        uses: actions/upload-artifact@v4
-        with:
-          name: vendor-translations-${{ steps.vars.outputs.date }}
-          path: vendor-translations/
-          retention-days: 90
-
-      - name: Store as Latest Version
-        uses: actions/upload-artifact@v4
-        with:
-          name: vendor-translations-latest
-          path: vendor-translations/
-          retention-days: 90
