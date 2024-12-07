@@ -54,11 +54,11 @@ jobs:
           # Copy previous vendor translations if they exist
           if [ -d "previous-translations" ] && [ -n "$(ls -A previous-translations)" ]; then
             cp previous-translations/*.properties "$TEMP_DIR/" || echo "WARNING: Some previous translations couldn't be copied"
-            rm -f "$TEMP_DIR/messages_en.properties"
           fi
           
           echo "Package contents:"
           ls -la "$TEMP_DIR"
+
 
       - name: Upload Vendor Package
         uses: actions/upload-artifact@v4
