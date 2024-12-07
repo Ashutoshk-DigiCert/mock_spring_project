@@ -1,6 +1,5 @@
 name: Vendor Translation Management
 
-# Add permissions
 permissions:
   contents: write
   pull-requests: write
@@ -29,18 +28,31 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Ensure GCS folder structure
+        run: |
+          gsutil ls gs://vendor_translations/latest-translations || gsutil mkdir gs://vendor_translations/latest-translations
+          gsutil ls gs://vendor_translations/vendor-packages || gsutil mkdir gs://vendor_translations/vendor-packages
+          gsutil ls gs://vendor_translations/archived-translations || gsutil mkdir gs://vendor_translations/archived-translations
+
+
       - name: Set date
         id: vars
         run: |
           echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
-      - name: Download Latest Release
-        id: download-release
+      - name: Download Previous Translations
         run: |
           mkdir -p previous-translations
-          gh release download latest-translations -D previous-translations || echo "No previous release found"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          gsutil cp "gs://vendor_translations/latest-translations/*.properties" previous-translations/ || echo "No previous translations found"
 
       - name: Create Vendor Package
         id: create-package
@@ -51,21 +63,14 @@ jobs:
           # Copy current English file
           cp src/main/resources/messages_en.properties "$TEMP_DIR/"
           
-          # Copy previous vendor translations if they exist
-          if [ -d "previous-translations" ] && [ -n "$(ls -A previous-translations)" ]; then
+          # Copy previous translations
+          if [ -d "previous-translations" ]; then
             cp previous-translations/*.properties "$TEMP_DIR/" || echo "WARNING: Some previous translations couldn't be copied"
           fi
-          
-          echo "Package contents:"
-          ls -la "$TEMP_DIR"
-
 
       - name: Upload Vendor Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: vendor-package-${{ steps.vars.outputs.date }}
-          path: vendor-package-${{ steps.vars.outputs.date }}
-          retention-days: 90
+        run: |
+          gsutil cp -r vendor-package-${{ steps.vars.outputs.date }}/* gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
 
   process-translations:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged != true
@@ -115,6 +120,21 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Ensure GCS folder structure
+        run: |
+          gsutil ls gs://vendor_translations/latest-translations || gsutil mkdir gs://vendor_translations/latest-translations
+          gsutil ls gs://vendor_translations/vendor-packages || gsutil mkdir gs://vendor_translations/vendor-packages
+          gsutil ls gs://vendor_translations/archived-translations || gsutil mkdir gs://vendor_translations/archived-translations
+
       - name: Set date
         id: vars
         run: |
@@ -152,44 +172,13 @@ jobs:
           
           echo "All vendor translation files verified successfully"
 
-      - name: Debug Storage Locations
+      - name: Upload to GCS
         run: |
-          echo "=== Current Directory Structure ==="
-          ls -R
+          # Clear existing latest translations
+          gsutil -m rm -r gs://vendor_translations/latest-translations/* || true
           
-          echo "=== Vendor Translations Directory ==="
-          ls -la vendor-translations/
+          # Upload new translations
+          gsutil -m cp vendor-translations/*.properties gs://vendor_translations/latest-translations/
           
-          echo "=== Creating Release Package ==="
-          mkdir -p "release-package"
-          cp vendor-translations/*.properties "release-package/"
-          ls -la "release-package"
-
-      - name: Create GitHub Release
-        run: |
-          echo "Attempting to delete existing release..."
-          gh release delete latest-translations --cleanup-tag || true
-          
-          echo "Creating new release..."
-          if ! gh release create latest-translations \
-            --title "Latest Vendor Translations" \
-            --notes "Updated vendor translations - ${{ steps.vars.outputs.date }}" \
-            --prerelease \
-            vendor-translations/*.properties; then
-          
-            echo "Failed to create release. Checking permissions..."
-            gh auth status
-            echo "Repository permissions:"
-            gh api repos/${{ github.repository }} | jq .permissions
-            exit 1
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Store Current Version as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vendor-translations-${{ steps.vars.outputs.date }}
-          path: vendor-translations/
-          retention-days: 90
+          # Also store dated version
+          gsutil -m cp vendor-translations/*.properties gs://vendor_translations/archived-translations/${{ steps.vars.outputs.date }}/
