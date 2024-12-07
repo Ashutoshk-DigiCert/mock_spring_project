@@ -1,11 +1,10 @@
 name: Vendor Translation Management
 
-# Add these permission settings
+# Add permissions
 permissions:
   contents: write
   pull-requests: write
   packages: write
-
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,7 +12,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Test schedule
+    - cron: '*/5 * * * *'  # Test schedule - will be '0 0 14,28 * *' in production
   pull_request:
     types: [opened, synchronize, closed]
     branches: ['main']
@@ -28,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set date
         id: vars
@@ -39,10 +38,9 @@ jobs:
         id: download-release
         run: |
           mkdir -p previous-translations
-          # Download latest release assets
           gh release download latest-translations -D previous-translations || echo "No previous release found"
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Vendor Package
         id: create-package
@@ -77,7 +75,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Copy Translations to Resources
         run: |
@@ -115,7 +113,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: main
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set date
         id: vars
@@ -154,19 +152,40 @@ jobs:
           
           echo "All vendor translation files verified successfully"
 
+      - name: Debug Storage Locations
+        run: |
+          echo "=== Current Directory Structure ==="
+          ls -R
+          
+          echo "=== Vendor Translations Directory ==="
+          ls -la vendor-translations/
+          
+          echo "=== Creating Release Package ==="
+          mkdir -p "release-package"
+          cp vendor-translations/*.properties "release-package/"
+          ls -la "release-package"
+
       - name: Create GitHub Release
         run: |
-          # Delete existing latest-translations release if it exists
+          echo "Attempting to delete existing release..."
           gh release delete latest-translations --cleanup-tag || true
           
-          # Create new release with translation files
-          gh release create latest-translations \
+          echo "Creating new release..."
+          if ! gh release create latest-translations \
             --title "Latest Vendor Translations" \
             --notes "Updated vendor translations - ${{ steps.vars.outputs.date }}" \
             --prerelease \
-            vendor-translations/*.properties
+            vendor-translations/*.properties; then
+          
+            echo "Failed to create release. Checking permissions..."
+            gh auth status
+            echo "Repository permissions:"
+            gh api repos/${{ github.repository }} | jq .permissions
+            exit 1
+          fi
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Store Current Version as Artifact
         uses: actions/upload-artifact@v4
