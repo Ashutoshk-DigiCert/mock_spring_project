@@ -6,7 +6,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Test schedule - will be '0 0 14,28 * *' in production
+    - cron: '*/5 * * * *'  # Test schedule
   pull_request:
     types: [opened, synchronize, closed]
     branches: ['main']
@@ -28,14 +28,14 @@ jobs:
         run: |
           echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
-      - name: Download Previous Vendor Translations
-        id: download-previous
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: vendor-translations-latest
-          path: previous-translations
-          github-token: ${{ secrets.WORKFLOW_TOKEN }}
+      - name: Download Latest Release
+        id: download-release
+        run: |
+          mkdir -p previous-translations
+          # Download latest release assets
+          gh release download latest-translations -D previous-translations || echo "No previous release found"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Vendor Package
         id: create-package
@@ -147,16 +147,23 @@ jobs:
           
           echo "All vendor translation files verified successfully"
 
-      - name: Store Current Translations
+      - name: Create GitHub Release
+        run: |
+          # Delete existing latest-translations release if it exists
+          gh release delete latest-translations --cleanup-tag || true
+          
+          # Create new release with translation files
+          gh release create latest-translations \
+            --title "Latest Vendor Translations" \
+            --notes "Updated vendor translations - ${{ steps.vars.outputs.date }}" \
+            --prerelease \
+            vendor-translations/*.properties
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Store Current Version as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: vendor-translations-${{ steps.vars.outputs.date }}
-          path: vendor-translations/
-          retention-days: 90
-
-      - name: Store as Latest Version
-        uses: actions/upload-artifact@v4
-        with:
-          name: vendor-translations-latest
           path: vendor-translations/
           retention-days: 90
