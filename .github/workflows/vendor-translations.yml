@@ -8,7 +8,7 @@ on:
   schedule:
     - cron: '*/5 * * * *'  # Test schedule - will be '0 0 14,28 * *' in production
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, closed]
     branches: ['main']
     paths: ['vendor-translations/**']
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
 
       - name: Download Previous Vendor Translations
         id: download-previous
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         continue-on-error: true
         with:
           name: vendor-translations-latest
@@ -55,14 +55,14 @@ jobs:
           ls -la "$TEMP_DIR"
 
       - name: Upload Vendor Package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: vendor-package-${{ steps.vars.outputs.date }}
           path: vendor-package-${{ steps.vars.outputs.date }}
           retention-days: 90
 
   process-translations:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
