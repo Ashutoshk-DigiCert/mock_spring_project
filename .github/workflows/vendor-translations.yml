@@ -113,12 +113,13 @@ jobs:
             A new vendor translation package has been created.
             
             Date: ${{ steps.vars.outputs.date }}
-            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.urls }}
+            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url }}
             
             Best regards,
             Translation Automation System
           to: ashuthoshsk@outlook.com
           from: Translation System
+
 
 
 
