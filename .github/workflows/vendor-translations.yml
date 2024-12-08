@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.WORKFLOW_TOKEN }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -72,6 +72,61 @@ jobs:
         run: |
           gsutil cp -r vendor-package-${{ steps.vars.outputs.date }}/* gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
 
+      - name: Verify Package Upload
+        run: |
+          if ! gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* >/dev/null 2>&1; then
+            echo "Error: Package files not found in GCS bucket"
+            exit 1
+          fi
+          echo "Package files found in bucket:"
+          gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
+
+      - name: Create ZIP Package
+        run: |
+          cd vendor-package-${{ steps.vars.outputs.date }}
+          zip -r ../translations-${{ steps.vars.outputs.date }}.zip *
+          cd ..
+          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
+
+      - name: Generate Signed URL
+        id: signed-url
+        run: |
+          echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
+
+          # Generate signed URL for ZIP file
+          URL=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
+            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip" | \
+            grep "gs://" | awk '{print $5}')
+
+          if [ -z "$URL" ]; then
+            echo "Error: Failed to generate signed URL"
+            exit 1
+          fi
+
+          echo "signed_url=$URL" >> $GITHUB_OUTPUT
+          rm -f /tmp/sa.json
+
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: New Vendor Translation Package Available - ${{ steps.vars.outputs.date }}
+          body: |
+            A new vendor translation package has been created.
+
+            Date: ${{ steps.vars.outputs.date }}
+            Download ZIP Package (valid for 7 days): ${{ steps.signed-url.outputs.signed_url }}
+
+            The ZIP package contains all translation files for this release.
+
+            Best regards,
+            Translation Automation System
+          to: ashuthoshsk@outlook.com
+          from: Translation System
+
   process-translations:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged != true
     runs-on: ubuntu-latest
@@ -80,7 +135,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.WORKFLOW_TOKEN }}
 
       - name: Copy Translations to Resources
         run: |
@@ -118,7 +173,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.WORKFLOW_TOKEN }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
