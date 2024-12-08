@@ -87,9 +87,10 @@ jobs:
           # Save service account credentials
           echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
           
-          # Generate signed URL with 7-day expiration
+          # Generate signed URL with explicit region and 7-day expiration
           echo "Generating signed URL..."
-          URL=$(gsutil signurl -d 7d /tmp/sa.json "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*" | \
+          URL=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
+            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*" | \
             tail -n 1 | awk '{print $4}')
           
           # Verify and set output
@@ -103,6 +104,7 @@ jobs:
           
           # Cleanup
           rm -f /tmp/sa.json
+
 
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
