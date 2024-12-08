@@ -85,7 +85,7 @@ jobs:
         id: signed-url
         run: |
           # Save private key from secret
-          echo "${{ secrets.GCS_SIGN_KEY }}" > /tmp/sign-key.pem
+          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > /tmp/sign-key.pem
           
           # Generate 7-day signed URL with private key
           URL=$(gsutil signurl -d 7d -k /tmp/sign-key.pem gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* | awk 'NR>1 {print $4}')
