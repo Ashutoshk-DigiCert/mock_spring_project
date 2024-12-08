@@ -84,27 +84,22 @@ jobs:
       - name: Generate Signed URL
         id: signed-url
         run: |
-          # Save service account credentials
           echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
           
-          # Generate signed URL with explicit region and 7-day expiration
-          echo "Generating signed URL..."
-          URL=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
-            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*" | \
-            tail -n 1 | awk '{print $4}')
+          # Generate and capture full URL output
+          FULL_OUTPUT=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
+            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*")
           
-          # Verify and set output
-          if [ -n "$URL" ]; then
-            echo "signed_url=$URL" >> $GITHUB_OUTPUT
-            echo "URL generated successfully"
-          else
-            echo "Failed to generate URL"
-            exit 1
-          fi
+          # Extract only the URL part (4th column of last line)
+          URL=$(echo "$FULL_OUTPUT" | tail -n 1 | cut -f4)
           
-          # Cleanup
+          # Debug output
+          echo "Full signurl output:"
+          echo "$FULL_OUTPUT"
+          echo "Extracted URL: $URL"
+          
+          echo "signed_url=$URL" >> $GITHUB_OUTPUT
           rm -f /tmp/sa.json
-
 
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
@@ -118,12 +113,13 @@ jobs:
             A new vendor translation package has been created.
             
             Date: ${{ steps.vars.outputs.date }}
-            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url || 'URL generation failed - please contact support' }}
-                        
+            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url }}
+            
             Best regards,
             Translation Automation System
           to: ashuthoshsk@outlook.com
-          from: Translation System <${{ secrets.EMAIL_USERNAME }}>
+          from: Translation System
+
 
 
   process-translations:
