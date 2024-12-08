@@ -72,11 +72,35 @@ jobs:
         run: |
           gsutil cp -r vendor-package-${{ steps.vars.outputs.date }}/* gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
 
+      - name: Verify Package Upload
+        run: |
+          if ! gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* >/dev/null 2>&1; then
+            echo "Error: Package files not found in GCS bucket"
+            exit 1
+          fi
+          echo "Package files found in bucket:"
+          gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
+
       - name: Generate Signed URL
         id: signed-url
         run: |
-          URL=$(gsutil signurl -d 7d gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* 2>/dev/null | awk 'NR>1 {print $4}')
-          echo "signed_url=${URL}" >> $GITHUB_OUTPUT
+          echo "Attempting to generate signed URL..."
+          echo "Listing files in bucket:"
+          gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
+          
+          # Generate signed URL with error checking
+          if ! URL=$(gsutil signurl -d 7d -u gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* 2>&1); then
+            echo "Error generating signed URL: $URL"
+            exit 1
+          fi
+          
+          # Extract and verify URL
+          FINAL_URL=$(echo "$URL" | awk 'NR>1 {print $4}')
+          echo "Generated URL: $FINAL_URL"
+          
+          # Set output
+          echo "signed_url=$FINAL_URL" >> $GITHUB_OUTPUT
+
 
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
@@ -90,12 +114,15 @@ jobs:
             A new vendor translation package has been created.
             
             Date: ${{ steps.vars.outputs.date }}
-            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url }}
+            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url || 'URL generation failed - please contact support' }}
+            
+            Package Location: gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
             
             Best regards,
             Translation Automation System
           to: ashuthoshsk@outlook.com
-          from: Translation System
+          from: Translation System <${{ secrets.EMAIL_USERNAME }}>
+
 
   process-translations:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged != true
