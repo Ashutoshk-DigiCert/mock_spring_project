@@ -84,16 +84,26 @@ jobs:
       - name: Generate Signed URL
         id: signed-url
         run: |
-          # Save private key from secret
-          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > /tmp/sign-key.pem
+          # Save service account credentials
+          echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
           
-          # Generate 7-day signed URL with private key
-          URL=$(gsutil signurl -d 7d -k /tmp/sign-key.pem gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* | awk 'NR>1 {print $4}')
+          # Generate signed URL with 7-day expiration
+          echo "Generating signed URL..."
+          URL=$(gsutil signurl -d 7d /tmp/sa.json "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*" | \
+            tail -n 1 | awk '{print $4}')
           
-          # Clean up
-          rm /tmp/sign-key.pem
+          # Verify and set output
+          if [ -n "$URL" ]; then
+            echo "signed_url=$URL" >> $GITHUB_OUTPUT
+            echo "URL generated successfully"
+          else
+            echo "Failed to generate URL"
+            exit 1
+          fi
           
-          echo "signed_url=${URL}" >> $GITHUB_OUTPUT
+          # Cleanup
+          rm -f /tmp/sa.json
+
 
 
       - name: Send Email Notification
@@ -109,9 +119,7 @@ jobs:
             
             Date: ${{ steps.vars.outputs.date }}
             Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url || 'URL generation failed - please contact support' }}
-            
-            Package Location: gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
-            
+                        
             Best regards,
             Translation Automation System
           to: ashuthoshsk@outlook.com
