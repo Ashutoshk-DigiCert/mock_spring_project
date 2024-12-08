@@ -81,33 +81,25 @@ jobs:
           echo "Package files found in bucket:"
           gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
 
-      - name: Generate Signed URLs
-        id: signed-urls
+      - name: Generate Signed URL
+        id: signed-url
         run: |
           echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
           
-          # Create a temporary file to store URLs
-          echo "Generating signed URLs..."
-          echo "Available Translation Files:" > /tmp/urls.txt
-          echo "-------------------------" >> /tmp/urls.txt
+          # Generate and capture full URL output
+          FULL_OUTPUT=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
+            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*")
           
-          # Generate URLs for all files and format them nicely
-          gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
-            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*" | \
-            awk 'NR>1 {
-              split($1,path,"/");
-              filename=path[length(path)];
-              printf "%s: %s\n", filename, $4
-            }' >> /tmp/urls.txt
+          # Extract only the URL part (4th column of last line)
+          URL=$(echo "$FULL_OUTPUT" | tail -n 1 | cut -f4)
           
-          # Save formatted content for email
-          URLS_CONTENT=$(cat /tmp/urls.txt)
-          echo "urls<<EOF" >> $GITHUB_OUTPUT
-          echo "$URLS_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Debug output
+          echo "Full signurl output:"
+          echo "$FULL_OUTPUT"
+          echo "Extracted URL: $URL"
           
-          # Cleanup
-          rm -f /tmp/sa.json /tmp/urls.txt
+          echo "signed_url=$URL" >> $GITHUB_OUTPUT
+          rm -f /tmp/sa.json
 
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
@@ -121,16 +113,12 @@ jobs:
             A new vendor translation package has been created.
             
             Date: ${{ steps.vars.outputs.date }}
-            
-            ${{ steps.signed-urls.outputs.urls }}
-            
-            All links are valid for 7 days.
+            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.urls }}
             
             Best regards,
             Translation Automation System
           to: ashuthoshsk@outlook.com
           from: Translation System
-
 
 
 
