@@ -72,6 +72,31 @@ jobs:
         run: |
           gsutil cp -r vendor-package-${{ steps.vars.outputs.date }}/* gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
 
+      - name: Generate Signed URL
+        id: signed-url
+        run: |
+          URL=$(gsutil signurl -d 7d gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* 2>/dev/null | awk 'NR>1 {print $4}')
+          echo "signed_url=${URL}" >> $GITHUB_OUTPUT
+
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: New Vendor Translation Package Available - ${{ steps.vars.outputs.date }}
+          body: |
+            A new vendor translation package has been created.
+            
+            Date: ${{ steps.vars.outputs.date }}
+            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url }}
+            
+            Best regards,
+            Translation Automation System
+          to: ${{ secrets.EMAIL_RECIPIENT }}
+          from: Translation System
+
   process-translations:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged != true
     runs-on: ubuntu-latest
