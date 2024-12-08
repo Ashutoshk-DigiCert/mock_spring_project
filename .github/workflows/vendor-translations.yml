@@ -93,13 +93,19 @@ jobs:
         run: |
           echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
 
-          # Generate signed URL for ZIP file and properly capture it
-          SIGNED_URL=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
-            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip" \
-            | awk 'NR==2 {print $4}')
+          # Generate signed URL for ZIP file
+          URL=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
+            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip" | \
+            grep "gs://" | awk '{print $5}')
 
-          echo "signed_url=${SIGNED_URL}" >> $GITHUB_OUTPUT
+          if [ -z "$URL" ]; then
+            echo "Error: Failed to generate signed URL"
+            exit 1
+          fi
+
+          echo "signed_url=$URL" >> $GITHUB_OUTPUT
           rm -f /tmp/sa.json
+      
       
       
 
@@ -123,6 +129,7 @@ jobs:
             Translation Automation System
           to: ashuthoshsk@outlook.com
           from: Translation System
+
 
 
 
