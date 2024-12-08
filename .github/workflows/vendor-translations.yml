@@ -81,25 +81,26 @@ jobs:
           echo "Package files found in bucket:"
           gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
 
+      - name: Create ZIP Package
+        run: |
+          cd vendor-package-${{ steps.vars.outputs.date }}
+          zip -r ../translations-${{ steps.vars.outputs.date }}.zip *
+          cd ..
+          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
+
       - name: Generate Signed URL
         id: signed-url
         run: |
           echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
           
-          # Generate and capture full URL output
-          FULL_OUTPUT=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
-            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*")
-          
-          # Extract only the URL part (4th column of last line)
-          URL=$(echo "$FULL_OUTPUT" | tail -n 1 | cut -f4)
-          
-          # Debug output
-          echo "Full signurl output:"
-          echo "$FULL_OUTPUT"
-          echo "Extracted URL: $URL"
+          # Generate signed URL for ZIP file
+          URL=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
+            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip" | \
+            tail -n 1 | awk '{print $4}')
           
           echo "signed_url=$URL" >> $GITHUB_OUTPUT
           rm -f /tmp/sa.json
+
 
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
@@ -113,7 +114,9 @@ jobs:
             A new vendor translation package has been created.
             
             Date: ${{ steps.vars.outputs.date }}
-            Download Link (valid for 7 days): ${{ steps.signed-url.outputs.signed_url }}
+            Download ZIP Package (valid for 7 days): ${{ steps.signed-url.outputs.signed_url }}
+            
+            The ZIP package contains all translation files for this release.
             
             Best regards,
             Translation Automation System
