@@ -81,15 +81,22 @@ jobs:
           echo "Package files found in bucket:"
           gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
 
+      - name: Get Bucket Location
+        id: bucket-location
+        run: |
+          LOCATION=$(gsutil ls -L -b gs://vendor_translations | grep -i "Location constraint:" | awk '{print $3}')
+          echo "location=$LOCATION" >> $GITHUB_OUTPUT
+
       - name: Generate Signed URL
         id: signed-url
         run: |
           # Save service account credentials
           echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
           
-          # Generate signed URL with 7-day expiration
+          # Generate signed URL with explicit region
           echo "Generating signed URL..."
-          URL=$(gsutil signurl -d 7d /tmp/sa.json "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*" | \
+          URL=$(gsutil signurl -r ${{ steps.bucket-location.outputs.location }} -d 7d /tmp/sa.json \
+            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*" | \
             tail -n 1 | awk '{print $4}')
           
           # Verify and set output
@@ -103,8 +110,6 @@ jobs:
           
           # Cleanup
           rm -f /tmp/sa.json
-
-
 
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
