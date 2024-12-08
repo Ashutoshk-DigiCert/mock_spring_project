@@ -84,26 +84,22 @@ jobs:
       - name: Generate Signed URL
         id: signed-url
         run: |
-          # Ensure the private key file is available
-          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}" > /tmp/service-account-key.json
-
-          # Generate signed URLs for all files in the vendor package
-          URLS=$(gsutil signurl -d 7d /tmp/service-account-key.json gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*)
+          echo "Attempting to generate signed URL..."
+          echo "Listing files in bucket:"
+          gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
           
-          # Extract and verify URLs
-          echo "$URLS"
-          FINAL_URLS=$(echo "$URLS" | grep -o 'https://storage.googleapis.com[^ ]*')
-          if [ -z "$FINAL_URLS" ]; then
-            echo "Error: Failed to generate signed URLs"
+          # Generate signed URL with error checking
+          if ! URL=$(gsutil signurl -d 7d -u gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* 2>&1); then
+            echo "Error generating signed URL: $URL"
             exit 1
           fi
-
-          echo "Generated URLs:"
-          echo "$FINAL_URLS"
           
-          # Save the first URL for email notification
-          echo "signed_url=$(echo "$FINAL_URLS" | head -n 1)" >> $GITHUB_OUTPUT
-
+          # Extract and verify URL
+          FINAL_URL=$(echo "$URL" | awk 'NR>1 {print $4}')
+          echo "Generated URL: $FINAL_URL"
+          
+          # Set output
+          echo "signed_url=$FINAL_URL" >> $GITHUB_OUTPUT
 
 
       - name: Send Email Notification
