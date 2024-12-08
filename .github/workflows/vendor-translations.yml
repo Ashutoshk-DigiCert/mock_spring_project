@@ -43,7 +43,6 @@ jobs:
           gsutil ls gs://vendor_translations/vendor-packages || gsutil mkdir gs://vendor_translations/vendor-packages
           gsutil ls gs://vendor_translations/archived-translations || gsutil mkdir gs://vendor_translations/archived-translations
 
-
       - name: Set date
         id: vars
         run: |
@@ -68,25 +67,21 @@ jobs:
             cp previous-translations/*.properties "$TEMP_DIR/" || echo "WARNING: Some previous translations couldn't be copied"
           fi
 
-      - name: Upload Vendor Package
-        run: |
-          gsutil cp -r vendor-package-${{ steps.vars.outputs.date }}/* gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
-
-      - name: Verify Package Upload
-        run: |
-          if ! gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* >/dev/null 2>&1; then
-            echo "Error: Package files not found in GCS bucket"
-            exit 1
-          fi
-          echo "Package files found in bucket:"
-          gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
-
-      - name: Create ZIP Package
+      - name: Create and Upload ZIP Package
         run: |
           cd vendor-package-${{ steps.vars.outputs.date }}
           zip -r ../translations-${{ steps.vars.outputs.date }}.zip *
           cd ..
           gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
+
+      - name: Verify Package Upload
+        run: |
+          if ! gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip >/dev/null 2>&1; then
+            echo "Error: ZIP package not found in GCS bucket"
+            exit 1
+          fi
+          echo "ZIP package successfully uploaded to bucket:"
+          gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip
 
       - name: Generate Signed URL
         id: signed-url
@@ -229,11 +224,16 @@ jobs:
 
       - name: Upload to GCS
         run: |
-          # Clear existing latest translations
+          # Create dated archive
+          mkdir -p archived-translations/${{ steps.vars.outputs.date }}
+          cp vendor-translations/*.properties archived-translations/${{ steps.vars.outputs.date }}/
+          cd archived-translations/${{ steps.vars.outputs.date }}
+          zip -r ../../translations-${{ steps.vars.outputs.date }}.zip *
+          cd ../..
+          
+          # Upload ZIP to archived translations
+          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/archived-translations/${{ steps.vars.outputs.date }}/
+          
+          # Update latest translations
           gsutil -m rm -r gs://vendor_translations/latest-translations/* || true
-          
-          # Upload new translations
-          gsutil -m cp vendor-translations/*.properties gs://vendor_translations/latest-translations/
-          
-          # Also store dated version
-          gsutil -m cp vendor-translations/*.properties gs://vendor_translations/archived-translations/${{ steps.vars.outputs.date }}/
+          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/latest-translations/
