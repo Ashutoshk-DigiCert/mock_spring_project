@@ -94,7 +94,7 @@ jobs:
             
             Best regards,
             Translation Automation System
-          to: ${{ secrets.EMAIL_RECIPIENT }}
+          to: ashuthoshsk@outlook.com
           from: Translation System
 
   process-translations:
