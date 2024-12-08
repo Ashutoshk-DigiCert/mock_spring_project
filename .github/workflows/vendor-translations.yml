@@ -84,25 +84,17 @@ jobs:
       - name: Generate Signed URL
         id: signed-url
         run: |
-          echo "Attempting to generate signed URL..."
-          echo "Listing files in bucket:"
-          gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*
+          # Save private key from secret
+          echo "${{ secrets.GCS_SIGN_KEY }}" > /tmp/sign-key.pem
+          
+          # Generate 7-day signed URL with private key
+          URL=$(gsutil signurl -d 7d -k /tmp/sign-key.pem gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/* | awk 'NR>1 {print $4}')
+          
+          # Clean up
+          rm /tmp/sign-key.pem
+          
+          echo "signed_url=${URL}" >> $GITHUB_OUTPUT
 
-          # Write the private key to a temporary file
-          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > /tmp/service_account_key.json
-
-          # Generate signed URL with the private key file
-          URL=$(gsutil signurl -d 7d /tmp/service_account_key.json gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/*)
-
-          # Clean up the private key file
-          rm /tmp/service_account_key.json
-
-          # Extract and verify URL
-          FINAL_URL=$(echo "$URL" | awk 'NR>1 {print $4}')
-          echo "Generated URL: $FINAL_URL"
-
-          # Set output
-          echo "signed_url=$FINAL_URL" >> $GITHUB_OUTPUT
 
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
