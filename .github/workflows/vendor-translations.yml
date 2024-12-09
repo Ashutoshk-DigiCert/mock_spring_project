@@ -11,7 +11,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Runs at midnight on the 14th and 28th ('0 0 14,28 * *') of each month
+    - cron: '0 0 14,28 * *' #'*/5 * * * *' Runs at midnight on the 14th and 28th ('0 0 14,28 * *') of each month
   pull_request:
     types: [opened, synchronize, closed]
     branches: ['main']
