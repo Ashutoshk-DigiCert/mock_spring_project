@@ -102,15 +102,15 @@ jobs:
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: Translation Package Ready for Review - ${{ steps.vars.outputs.date }}
           body: |
-            Dear Translation Team,
+            Hello Team,
 
-            A new translation package is ready for your review and processing.
+            A new translation package is ready to send.
 
             Package Details:
             - Release Date: ${{ steps.vars.outputs.date }}
             - Secure Download Link (expires in 7 days): ${{ steps.signed-url.outputs.signed_url }}
 
-            Please review and submit the translated files through a pull request in the vendor-translations directory.
+            Please send the files for translations to the vendor.
 
             Best regards,
             Translation Management System
