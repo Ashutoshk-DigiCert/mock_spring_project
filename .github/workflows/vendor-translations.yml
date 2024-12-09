@@ -94,7 +94,7 @@ jobs:
           rm -f /tmp/sa.json
 
       - name: Send Notification Email
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v4
         with:
           server_address: smtp.gmail.com
           server_port: 465
@@ -141,7 +141,7 @@ jobs:
           installation_retrieval_mode: 'repository'
 
       - name: Create Resource Update Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ steps.generate-token.outputs.token }}
           commit-message: "📦 Update: Synchronize translation resources"

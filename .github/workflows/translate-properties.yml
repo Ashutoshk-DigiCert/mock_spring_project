@@ -79,7 +79,7 @@ jobs:
           cache: 'gradle'
 
       - name: Cache Gradle packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -171,7 +171,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.check-for-changes.outputs.changes_detected == 'true'
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         id: create-pr
         with:
           token: ${{ steps.generate-token.outputs.token }}
