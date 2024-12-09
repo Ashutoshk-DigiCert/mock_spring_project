@@ -48,10 +48,16 @@ jobs:
         run: |
           echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
-      - name: Retrieve Previous Translations
+      - name: Retrieve Previous Translation Package
         run: |
           mkdir -p previous-translations
-          gsutil cp "gs://vendor_translations/latest-translations/*.properties" previous-translations/ || echo "No previous translations found"
+          gsutil ls gs://vendor_translations/latest-translations/translations-*.zip > /dev/null 2>&1
+          if [ $? -eq 0 ]; then
+          gsutil cp gs://vendor_translations/latest-translations/translations-*.zip previous-translations/translations.zip
+          unzip previous-translations/translations.zip -d previous-translations/
+          else
+          echo "No previous translation package found"
+          fi
 
       - name: Assemble Translation Package
         id: create-package
@@ -68,7 +74,7 @@ jobs:
           cd vendor-package-${{ steps.vars.outputs.date }}
           zip -r ../translations-${{ steps.vars.outputs.date }}.zip *
           cd ..
-          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/
+          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip
 
       - name: Validate Package Upload
         run: |
