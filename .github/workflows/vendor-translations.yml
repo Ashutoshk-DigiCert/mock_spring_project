@@ -138,6 +138,9 @@ jobs:
           cp -f vendor-translations/*.properties src/main/resources/
           echo "Copied translations to resources directory"
 
+          rm -f vendor-translations/*.properties
+          echo "Removed translation files from vendor-translations directory"
+
       - name: Generate GitHub App Token
         id: generate-token
         uses: tibdex/github-app-token@v2
@@ -155,6 +158,10 @@ jobs:
           body: |
             This PR updates the application resources with new translations.
             Source PR: #${{ github.event.pull_request.number }}
+            
+            This PR:
+              1. Updates the application resources with new translations
+              2. Removes processed translation files from vendor-translations folder
           branch: translation-update-${{ github.event.pull_request.number }}
           base: ${{ github.head_ref }}
           labels: translation-update
