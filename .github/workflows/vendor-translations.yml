@@ -1,255 +1,77 @@
 name: Vendor Translation Management
 
 permissions:
-  contents: write
-  pull-requests: write
-  packages: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  contents: read
 
 on:
   schedule:
-    - cron: '0 0 14,28 * *' #'*/5 * * * *' Runs at midnight on the 14th and 28th ('0 0 14,28 * *') of each month
-  pull_request:
-    types: [opened, synchronize, closed]
-    branches: ['main']
-    paths: ['vendor-translations/**']
+    - cron: '0 0 14,28 * *'  # Runs at midnight on the 14th and 28th of each month
   workflow_dispatch:
 
 jobs:
-  prepare-translation-package:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  send-translation-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout DTM Repository
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          path: dtm-repo
+
+      - name: Checkout Translation Repository
+        uses: actions/checkout@v4
+        with:
+          repository: Ashutoshk-DigiCert/DTMmock
+          path: translation-repo
           token: ${{ secrets.WORKFLOW_TOKEN }}
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Initialize Storage Structure
-        run: |
-          gsutil ls gs://vendor_translations/latest-translations || gsutil mkdir gs://vendor_translations/latest-translations
-          gsutil ls gs://vendor_translations/vendor-packages || gsutil mkdir gs://vendor_translations/vendor-packages
-          gsutil ls gs://vendor_translations/archived-translations || gsutil mkdir gs://vendor_translations/archived-translations
 
       - name: Set Package Date
         id: vars
         run: |
           echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
-      - name: Retrieve Previous Translation Package
+      - name: Create Translation Package
         run: |
-          mkdir -p previous-translations
-          gsutil ls gs://vendor_translations/latest-translations/translations-*.zip > /dev/null 2>&1
-          if [ $? -eq 0 ]; then
-          gsutil cp gs://vendor_translations/latest-translations/translations-*.zip previous-translations/translations.zip
-          unzip previous-translations/translations.zip -d previous-translations/
-          else
-          echo "No previous translation package found"
-          fi
-
-      - name: Assemble Translation Package
-        id: create-package
-        run: |
-          TEMP_DIR="vendor-package-${{ steps.vars.outputs.date }}"
-          mkdir -p "$TEMP_DIR"
-          cp src/main/resources/messages_en.properties "$TEMP_DIR/"
-          if [ -d "previous-translations" ]; then
-            cp previous-translations/*.properties "$TEMP_DIR/" || echo "WARNING: Some previous translations couldn't be copied"
-          fi
-
-      - name: Package and Upload Translations
-        run: |
-          cd vendor-package-${{ steps.vars.outputs.date }}
+          PACKAGE_DIR="translation-package-${{ steps.vars.outputs.date }}"
+          mkdir -p "$PACKAGE_DIR"
+          
+          # Copy English properties from DTM repo
+          cp dtm-repo/src/main/resources/messages_en.properties "$PACKAGE_DIR/"
+          
+          # Copy language files from Translation repo
+          cp translation-repo/latest_vendor_translations/messages_*.properties "$PACKAGE_DIR/" || echo "No additional language files found"
+          
+          # Create ZIP package
+          cd "$PACKAGE_DIR"
           zip -r ../translations-${{ steps.vars.outputs.date }}.zip *
           cd ..
-          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip
 
-      - name: Validate Package Upload
-        run: |
-          if ! gsutil ls gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip >/dev/null 2>&1; then
-            echo "Error: ZIP package not found in GCS bucket"
-            exit 1
-          fi
-          echo "ZIP package successfully uploaded to bucket:"
-          gsutil ls -l gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip
-
-      - name: Generate Download Link
-        id: signed-url
-        run: |
-          echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/sa.json
-          URL=$(gsutil signurl -r ASIA-SOUTH1 -d 7d /tmp/sa.json \
-            "gs://vendor_translations/vendor-packages/${{ steps.vars.outputs.date }}/translations-${{ steps.vars.outputs.date }}.zip" | \
-            grep "gs://" | awk '{print $5}')
-          if [ -z "$URL" ]; then
-            echo "Error: Failed to generate download link"
-            exit 1
-          fi
-          echo "signed_url=$URL" >> $GITHUB_OUTPUT
-          rm -f /tmp/sa.json
-
-      - name: Send Notification Email
+      - name: Send Email with Translation Package
         uses: dawidd6/action-send-mail@v4
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: Translation Package Ready for Review - ${{ steps.vars.outputs.date }}
+          subject: Translation Package for Review - ${{ steps.vars.outputs.date }}
           body: |
             Hello Team,
 
-            A new translation package is ready to send.
+            Please find attached the translation package for vendor review.
 
-            Package Details:
-            - Release Date: ${{ steps.vars.outputs.date }}
-            - Secure Download Link (expires in 7 days): ${{ steps.signed-url.outputs.signed_url }}
+            Package Contents:
+            1. For Translation:
+               - messages_en.properties: Latest English content requiring translation
+            
+            2. Reference Files:
+               - Previously translated language files from our last vendor delivery
+               (These files are included for reference and consistency)
 
-            Please send the files for translations to the vendor.
+            Action Required:
+            - Please forward the messages_en.properties file to the vendor for translation
+            - The reference files will help maintain translation consistency
 
             Best regards,
             Translation Management System
           to: ashuthoshsk@outlook.com
           from: Translation System
-
-  handle-translation-updates:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged != true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.WORKFLOW_TOKEN }}
-
-      - name: Synchronize Translation Resources
-        run: |
-          cp -f vendor-translations/*.properties src/main/resources/
-          echo "Copied translations to resources directory"
-
-      - name: Generate GitHub App Token
-        id: generate-token
-        uses: tibdex/github-app-token@v2
-        with:
-          app_id: ${{ secrets.BOT_APP_ID }}
-          private_key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-          installation_retrieval_mode: 'repository'
-
-      - name: Create Resource Update Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ steps.generate-token.outputs.token }}
-          commit-message: "📦 Update: Synchronize translation resources"
-          title: "📦 Update: Integrate new translations"
-          body: |
-            This PR updates the application resources with new translations.
-            Source PR: #${{ github.event.pull_request.number }}
-            
-            This PR:
-              1. Updates the application resources with new translations
-              2. Removes processed translation files from vendor-translations folder
-          branch: translation-update-${{ github.event.pull_request.number }}
-          base: ${{ github.head_ref }}
-          labels: translation-update
-          reviewers: |
-            Ashutoshsk
-
-  store-vendor-translations:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: main
-          token: ${{ secrets.WORKFLOW_TOKEN }}
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Initialize Storage Structure
-        run: |
-          gsutil ls gs://vendor_translations/latest-translations || gsutil mkdir gs://vendor_translations/latest-translations
-          gsutil ls gs://vendor_translations/vendor-packages || gsutil mkdir gs://vendor_translations/vendor-packages
-          gsutil ls gs://vendor_translations/archived-translations || gsutil mkdir gs://vendor_translations/archived-translations
-
-      - name: Set Storage Date
-        id: vars
-        run: |
-          echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
-
-      - name: Sync Translation Files
-        run: |
-          git fetch origin ${{ github.event.pull_request.head.ref }}
-          git checkout origin/${{ github.event.pull_request.head.ref }} -- vendor-translations/
-          git add vendor-translations/
-
-      - name: Validate Translation Files
-        run: |
-          EXIT_CODE=0
-          for file in vendor-translations/*.properties; do
-            if [ ! -f "$file" ]; then
-              echo "ERROR: Failed to read $file"
-              EXIT_CODE=1
-              continue
-            fi
-
-            if ! grep -q "=" "$file"; then
-              echo "ERROR: Invalid format in $file - no property assignments found"
-              EXIT_CODE=1
-              continue
-            fi
-
-            echo "Verified: $file"
-          done
-
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "ERROR: One or more translation files failed validation"
-            exit 1
-          fi
-
-          echo "All vendor translation files verified successfully"
-
-      - name: Store and Update Translations
-        run: |
-          mkdir -p archived-translations/${{ steps.vars.outputs.date }}
-          cp vendor-translations/*.properties archived-translations/${{ steps.vars.outputs.date }}/
-          cd archived-translations/${{ steps.vars.outputs.date }}
-          zip -r ../../translations-${{ steps.vars.outputs.date }}.zip *
-          cd ../..
-
-          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/archived-translations/${{ steps.vars.outputs.date }}/
-
-          gsutil -m rm -r gs://vendor_translations/latest-translations/* || true
-          gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/latest-translations/
-
-      - name: Cleanup Local Translation Files
-        run: |
-          # Remove only the .properties files from vendor-translations directory
-          rm -f vendor-translations/*.properties
-          # Keep an empty .gitkeep file to preserve the directory
-          touch vendor-translations/.gitkeep
-
-          # Create and push a commit to remove the files
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add vendor-translations/
-          git commit -m "🧹 Cleanup: Remove processed translation files" || echo "No changes to commit"
-          git push origin main
+          attachments: ./translations-${{ steps.vars.outputs.date }}.zip
