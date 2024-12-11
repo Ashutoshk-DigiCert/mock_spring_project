@@ -240,4 +240,15 @@ jobs:
           gsutil -m rm -r gs://vendor_translations/latest-translations/* || true
           gsutil cp translations-${{ steps.vars.outputs.date }}.zip gs://vendor_translations/latest-translations/
 
+      - name: Clean Up Translation Files
+        run: |
+          # Remove all .properties files from vendor-translations folder
+          rm -f vendor-translations/*.properties
+          echo "Translation files have been removed from the repository."
 
+      - name: Commit and Push Deletions
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git commit -m "Remove translation files after uploading to bucket"
+          git push origin main
