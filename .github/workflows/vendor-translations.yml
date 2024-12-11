@@ -242,8 +242,10 @@ jobs:
 
       - name: Cleanup Local Translation Files
         run: |
-          # Remove the files from vendor-translations directory
+          # Remove only the .properties files from vendor-translations directory
           rm -f vendor-translations/*.properties
+          # Keep an empty .gitkeep file to preserve the directory
+          touch vendor-translations/.gitkeep
 
           # Create and push a commit to remove the files
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
